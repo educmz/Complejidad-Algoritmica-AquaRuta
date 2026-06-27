@@ -19,13 +19,15 @@ function formatCompact(value) {
 }
 
 function formatKm(value) {
-  return `${(Number(value) || 0).toFixed(1)} km`;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "No calculable";
+  return `${number.toFixed(1)} km`;
 }
 
 function sortOptions() {
   return [
     ["criticidad", "Criticidad"],
-    ["prioridad", "Prioridad"],
+    ["prioridad", "Orden operativo"],
     ["interrupciones", "Interrupciones"],
     ["zonas", "Zonas"],
     ["poblacion", "Unidades afectadas"],
@@ -50,7 +52,11 @@ export default function TerritoryResultsTable({
       <div className="territory-results-toolbar">
         <div>
           <h3>Grupos operativos</h3>
-          <p>Selecciona un grupo para revisar cobertura, zonas incluidas y EPS sugerida.</p>
+          <p>
+            Revisa grupos sectorizables, grupos individuales y zonas sin georreferenciación antes
+            de abrir el detalle. La EPS de referencia es un origen operativo externo o local y no
+            forma parte del grupo.
+          </p>
         </div>
         <div className="territory-results-tools">
           <input
@@ -77,10 +83,18 @@ export default function TerritoryResultsTable({
       {zonesBlock && (
         <div className="territory-zones-panel">
           <div>
-            <strong>Zonas de {zonesBlock.nombre}</strong>
-            <span>{formatNumber(zones.length)} zonas incluidas</span>
+            <strong>Zonas incluidas en {zonesBlock.nombre}</strong>
+            <span>
+              Estas son las zonas registradas dentro del grupo operativo. Algunas pueden no tener
+              coordenadas geográficas disponibles.
+            </span>
           </div>
           <button type="button" onClick={() => setZonesBlock(null)}>Cerrar</button>
+          {zones.length === 1 && (
+            <p className="territory-zones-note">
+              Este grupo contiene una sola zona y se considera un grupo individual.
+            </p>
+          )}
           <div className="territory-zones-list">
             {zones.map((zone) => (
               <span key={zone}>{zone}</span>
@@ -94,10 +108,11 @@ export default function TerritoryResultsTable({
           <thead>
             <tr>
               <th>Grupo</th>
+              <th>Tipo</th>
               <th>Criticidad</th>
               <th>Zonas</th>
-              <th>Cobertura</th>
-              <th>EPS sugerida</th>
+              <th>Cobertura EPS</th>
+              <th>EPS de referencia</th>
               <th>Interrupciones</th>
               <th>Unidades afectadas</th>
               <th></th>
@@ -116,9 +131,18 @@ export default function TerritoryResultsTable({
                     <small>{block.scopeLabel}</small>
                   </button>
                 </td>
+                <td>
+                  <span className={`territory-group-type ${block.groupType}`}>
+                    {block.groupTypeLabel}
+                  </span>
+                </td>
                 <td><span className={badgeClass(block.criticidad)}>{block.criticidad}</span></td>
                 <td>{formatNumber(block.cantidad_zonas)}</td>
-                <td>{block.coverageLabel}</td>
+                <td>
+                  <span className={`territory-eps-status ${block.epsCoverageKey}`}>
+                    {block.epsCoverageLabel}
+                  </span>
+                </td>
                 <td>
                   {block.nearestOrigin?.prestador || "No disponible"}
                   <small>{formatKm(block.nearestOriginDistanceKm)}</small>
@@ -128,10 +152,10 @@ export default function TerritoryResultsTable({
                 <td>
                   <div className="territory-row-actions compact">
                     <button type="button" onClick={() => onOpenGroup(block)}>
-                      Ver grupo
+                      Abrir detalle
                     </button>
                     <button type="button" onClick={() => setZonesBlock(block)}>
-                      Ver zonas
+                      Ver zonas incluidas
                     </button>
                   </div>
                 </td>

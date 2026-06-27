@@ -13,25 +13,25 @@ const navItems = [
     label: "Grupos operativos",
     path: "/agrupacion",
     icon: "grouping",
-    meta: "Organización territorial",
+    meta: "Zonas agrupadas",
   },
   {
     label: "Sectorización",
     path: "/sectorizacion",
     icon: "sector",
-    meta: "Grupos operativos",
+    meta: "División de grupos",
   },
   {
     label: "Exploración de rutas",
     path: "/mapa",
     icon: "map",
-    meta: "Grafo vial",
+    meta: "Rutas entre EPS y destino",
   },
   {
     label: "Exploración local",
     path: "/exploracion-local",
     icon: "explore",
-    meta: "Rutas candidatas",
+    meta: "Secuencia dentro del sector",
   },
 ];
 

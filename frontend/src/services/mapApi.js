@@ -1,7 +1,5 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "")
-
 export async function fetchRouteGeoJson(coordinates, options = {}) {
-  const response = await fetch(`${API_BASE_URL}/route`, {
+  const response = await fetch("http://127.0.0.1:8000/route", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -33,7 +31,7 @@ export async function fetchRouteGeoJson(coordinates, options = {}) {
 }
 
 export async function fetchRouteGeoJsonBatch(routes) {
-  const response = await fetch(`${API_BASE_URL}/routes-batch`, {
+  const response = await fetch("http://127.0.0.1:8000/routes-batch", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

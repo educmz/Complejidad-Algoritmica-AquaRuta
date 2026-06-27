@@ -14,6 +14,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import MainLayout from "../components/layout/MainLayout";
 import { aquaRutaData } from "../data/aquaRutaData";
+import { epsCoverageStatus, epsRequiresValidation } from "../utils/epsCoverage";
 
 const criterionOptions = {
   geografico: {
@@ -321,7 +322,7 @@ function SectorMap({
               <Popup>
                 <strong>{epsOrigin.prestador}</strong>
                 <br />
-                EPS sugerida para el sector activo
+                EPS de referencia para el sector activo
               </Popup>
             </Marker>
           )}
@@ -398,6 +399,7 @@ export default function Sectorizacion() {
         0
       );
       const nearest = nearestOrigin(sector.center, epsOrigins);
+      const epsCoverage = epsCoverageStatus(nearest.distance);
       const loadPct = (Number(sector.interrupciones || 0) / totalInterruptions) * 100;
       return {
         ...sector,
@@ -409,6 +411,7 @@ export default function Sectorizacion() {
         connections,
         nearestOrigin: nearest.origin,
         nearestOriginDistanceKm: nearest.distance,
+        epsCoverage,
         loadPct,
         balanceRelative:
           loadPct > 45 ? "Carga alta" : loadPct < 18 ? "Carga liviana" : "Carga equilibrada",
@@ -460,7 +463,13 @@ export default function Sectorizacion() {
         <article className="sector-hero-panel">
           <div>
             <h2>Sectorización</h2>
-            <span>Compara particiones generadas de un grupo operativo y elige que sector atender primero.</span>
+            <span>
+              Divide un grupo operativo grande en sectores más pequeños para priorizar la atención.
+            </span>
+            <small>
+              Un sector reúne zonas cercanas del mismo grupo para repartir carga, priorizar atención
+              y revisar cobertura EPS.
+            </small>
           </div>
           <div className="sector-hero-summary">
             <div>
@@ -468,7 +477,7 @@ export default function Sectorizacion() {
               <strong>{formatNumber(sectors.length)}</strong>
             </div>
             <div>
-              <span>Sector prioritario</span>
+              <span>Sector recomendado para atender primero</span>
               <strong>{urgentSector?.nombre || "S/D"}</strong>
             </div>
           </div>
@@ -491,7 +500,7 @@ export default function Sectorizacion() {
               </select>
             </label>
             <label className="control-group">
-              <span className="control-label">Cantidad de sectores</span>
+              <span className="control-label">Número de sectores a generar</span>
               <select
                 className="control-select"
                 value={effectiveSectorCount}
@@ -523,9 +532,9 @@ export default function Sectorizacion() {
                 <small>{formatNumber(leastLoaded?.interrupciones)} interrupciones</small>
               </div>
               <div>
-                <span>Diferencia de carga</span>
+                <span>Diferencia respecto a la carga esperada</span>
                 <strong>{formatNumber(comparison.diffInterruptions)}</strong>
-                <small>{comparison.spreadPct.toFixed(1)}% contra carga ideal</small>
+                <small>{comparison.spreadPct.toFixed(1)}% frente a una distribución equilibrada</small>
               </div>
             </div>
           </article>
@@ -534,7 +543,10 @@ export default function Sectorizacion() {
             <div className="sector-table-heading">
               <div>
                 <h3>Sectores generados</h3>
-                <p>Selecciona un sector para revisar mapa, EPS sugerida y zonas incluidas.</p>
+                <p>
+                  Selecciona un sector para ver sus zonas, su carga de interrupciones y su EPS de
+                  referencia.
+                </p>
               </div>
             </div>
 
@@ -547,8 +559,8 @@ export default function Sectorizacion() {
                     <th>Interrupciones</th>
                     <th>Criticidad</th>
                     <th>Prioridad</th>
-                    <th>% carga</th>
-                    <th>EPS sugerida</th>
+                    <th>Participación de carga</th>
+                    <th>EPS de referencia</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -571,11 +583,19 @@ export default function Sectorizacion() {
                       <td>
                         {sector.nearestOrigin?.prestador || "No disponible"}
                         <small>{formatKm(sector.nearestOriginDistanceKm)}</small>
+                        <span className={`territory-eps-status ${sector.epsCoverage.key}`}>
+                          {sector.epsCoverage.label}
+                        </span>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {!sectors.length && (
+                <div className="empty-state">
+                  Selecciona un grupo sectorizable para generar o revisar sectores.
+                </div>
+              )}
             </div>
           </article>
         </section>
@@ -594,7 +614,10 @@ export default function Sectorizacion() {
 
           <aside className="sector-detail-panel">
             {!activeSector ? (
-              <div className="empty-state">Selecciona un sector para revisar detalle operativo.</div>
+              <div className="empty-state">
+                No sectorizable: este grupo no cuenta con suficientes nodos georreferenciados para
+                dividirse en sectores.
+              </div>
             ) : (
               <>
                 <div className="sector-detail-heading">
@@ -616,16 +639,34 @@ export default function Sectorizacion() {
                     <strong>{formatNumber(activeSector.interrupciones)}</strong>
                   </div>
                   <div>
-                    <span>% carga</span>
+                    <span>Participación de carga</span>
                     <strong>{activeSector.loadPct.toFixed(1)}%</strong>
                   </div>
                 </div>
 
                 <div className="sector-eps-card">
-                  <span>EPS sugerida</span>
+                  <span>EPS de referencia</span>
                   <strong>{activeSector.nearestOrigin?.prestador || "No disponible"}</strong>
                   <small>{formatKm(activeSector.nearestOriginDistanceKm)} al centro del sector</small>
+                  <span className={`territory-eps-status ${activeSector.epsCoverage.key}`}>
+                    {activeSector.epsCoverage.label}
+                  </span>
                 </div>
+
+                {epsRequiresValidation(activeSector.epsCoverage) && (
+                  <div className="territory-route-status warning">
+                    <strong>Validación operativa requerida</strong>
+                    <span>
+                      La EPS de referencia debe revisarse antes de usarla como origen de atención.
+                    </span>
+                  </div>
+                )}
+
+                <p className="territory-context-note">
+                  Este sector pertenece al grupo operativo seleccionado y contiene las zonas que
+                  aparecen listadas. La carga representa su proporción de interrupciones respecto
+                  al total del grupo.
+                </p>
 
                 <div className="sector-zone-list">
                   <span>Zonas del sector</span>

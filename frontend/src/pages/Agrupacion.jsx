@@ -7,6 +7,11 @@ import TerritorySidePanel from "../components/grouping/TerritorySidePanel";
 import TerritoryResultsTable from "../components/grouping/TerritoryResultsTable";
 import { fetchRouteGeoJson } from "../services/mapApi";
 import { aquaRutaData } from "../data/aquaRutaData";
+import { epsCoverageStatus } from "../utils/epsCoverage";
+import {
+  DEFAULT_GROUPING_CONFIG,
+  buildGroupedZonesWithUfds,
+} from "../utils/ufdsGrouping";
 
 const priorityRank = { critica: 4, alta: 3, media: 2, baja: 1 };
 const statusLabels = {
@@ -14,11 +19,6 @@ const statusLabels = {
   priorizado: "Priorizado",
   revision: "En revisión",
   rutas: "Listo para ruteo",
-};
-const coverageLabels = {
-  suficiente: "Suficiente",
-  intermedia: "Intermedia",
-  insuficiente: "Insuficiente",
 };
 const routeTypeLabels = {
   grupal: "Cobertura grupal",
@@ -33,8 +33,7 @@ const initialFilters = {
   criticidad: "todas",
   epsOriginId: "todos",
   zoneSize: "todos",
-  nodeSize: "todos",
-  priority: "todos",
+  groupType: "todos",
   nodeStatus: "todos",
   routeType: "grupal",
   routeStatus: "todos",
@@ -85,6 +84,39 @@ function nearestOrigin(center, epsOrigins) {
     .sort((a, b) => a.distance - b.distance)[0];
 }
 
+function normalizeProviderName(value) {
+  return normalizeText(value)
+    .replace(/\bs\.?\s*a\.?\b/g, "")
+    .replace(/\beps\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function preferredOriginForGroup(groupDistricts, center, epsOrigins) {
+  if (!center || !epsOrigins.length) {
+    return { origin: null, distance: Infinity };
+  }
+
+  const providers = [
+    ...new Set(
+      groupDistricts
+        .map((district) => district.eps_principal)
+        .filter(Boolean)
+        .map(normalizeProviderName)
+    ),
+  ];
+
+  const candidates = epsOrigins.filter((origin) => {
+    const provider = normalizeProviderName(origin.prestador);
+    return providers.some(
+      (item) => provider.includes(item) || item.includes(provider)
+    );
+  });
+
+  const source = candidates.length ? candidates : epsOrigins;
+  return nearestOrigin(center, source);
+}
+
 function weightedAverage(items, field) {
   const totalWeight = items.reduce((acc, item) => acc + (item.interrupciones || 0), 0);
   if (!totalWeight) return 0;
@@ -96,28 +128,11 @@ function weightedAverage(items, field) {
   );
 }
 
-function coverageFromDistance(distance) {
-  if (!Number.isFinite(distance) || distance > 60) return "insuficiente";
-  if (distance > 30) return "intermedia";
-  return "suficiente";
-}
-
 function derivedStatus(group, hasRouteScenario) {
   if (hasRouteScenario) return "rutas";
   if (group.criticidad === "critica") return "priorizado";
   if (group.criticidad === "alta" || group.criticidad === "media") return "revision";
   return "pendiente";
-}
-
-function priorityLabel(item) {
-  if (item.criticidad === "critica" || item.estimatedPopulation > 1_000_000) {
-    return "Atención inmediata";
-  }
-  if (item.criticidad === "alta" || item.nearestOriginDistanceKm > 30) {
-    return "Alta prioridad";
-  }
-  if (item.criticidad === "media") return "Programar supervisión";
-  return "Seguimiento";
 }
 
 function scopeLabel(departments, provinces) {
@@ -204,10 +219,26 @@ function coordinateSignature(coordinates = []) {
 
 function matchesSizeBucket(value, bucket) {
   if (bucket === "todos") return true;
-  if (bucket === "pequeno") return value <= 5;
+  if (bucket === "individual") return value === 1;
+  if (bucket === "pequeno") return value >= 2 && value <= 5;
   if (bucket === "mediano") return value >= 6 && value <= 15;
   if (bucket === "grande") return value >= 16;
   return true;
+}
+
+function groupTypeFor(block) {
+  if ((block.validNodes?.length || 0) === 0 && (block.invalidNodes?.length || 0) > 0) {
+    return "sin-georreferenciacion";
+  }
+  if (block.cantidad_zonas === 1 || block.validNodes?.length === 1) return "individual";
+  if ((block.validNodes?.length || 0) >= 2) return "sectorizable";
+  return "sin-georreferenciacion";
+}
+
+function groupTypeLabel(type) {
+  if (type === "sectorizable") return "Sectorizable";
+  if (type === "individual") return "Grupo individual";
+  return "Sin georreferenciación";
 }
 
 function selectedOriginFor({ activeBlock, activeNode, epsOriginId, epsOrigins }) {
@@ -294,9 +325,32 @@ function summaryFromGeoJson(geoJson) {
 export default function Agrupacion() {
   const [searchParams] = useSearchParams();
   const districts = useMemo(() => aquaRutaData.districts || [], []);
-  const groupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
   const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
   const operationalRoutes = useMemo(() => aquaRutaData.operationalRoutes || {}, []);
+  const initialCriterionFromData = useMemo(
+    () => aquaRutaData.groupedZones?.[0]?.criterio_agrupacion || null,
+    []
+  );
+  const [groupingConfig] = useState(() => ({
+    ...DEFAULT_GROUPING_CONFIG,
+    criterio: initialCriterionFromData?.criterio || DEFAULT_GROUPING_CONFIG.criterio,
+    umbralDistanciaGeograficaKm:
+      Number(initialCriterionFromData?.umbral_distancia_geografica_km) ||
+      DEFAULT_GROUPING_CONFIG.umbralDistanciaGeograficaKm,
+    umbralDistanciaVialKm:
+      Number(initialCriterionFromData?.umbral_distancia_vial_km) ||
+      DEFAULT_GROUPING_CONFIG.umbralDistanciaVialKm,
+    umbralTiempoMin:
+      Number(initialCriterionFromData?.umbral_tiempo_min) ||
+      DEFAULT_GROUPING_CONFIG.umbralTiempoMin,
+    umbralCosto:
+      Number(initialCriterionFromData?.umbral_costo) ||
+      DEFAULT_GROUPING_CONFIG.umbralCosto,
+  }));
+  const groupedZones = useMemo(
+    () => buildGroupedZonesWithUfds(districts, groupingConfig),
+    [districts, groupingConfig]
+  );
 
   const requestedGroupId = searchParams.get("grupo") || "";
   const requestedDistrictId = searchParams.get("distrito") || "";
@@ -345,7 +399,12 @@ export default function Agrupacion() {
           ufds: nodeMetaById.get(district.id) || null,
         }));
         const centeredDistricts = groupDistrictsWithUfds.filter(hasValidCenter);
-        const nearest = nearestOrigin(group.center, epsOrigins);
+        const fallbackCenter = group.center || centeredDistricts[0]?.center || null;
+        const nearest = preferredOriginForGroup(
+          groupDistrictsWithUfds,
+          fallbackCenter,
+          epsOrigins
+        );
         const departments = [
           ...new Set(groupDistrictsWithUfds.map((district) => district.departamento).filter(Boolean)),
         ].sort();
@@ -376,16 +435,18 @@ export default function Agrupacion() {
           null;
         const spreadDistances = centeredDistricts
           .map((district) =>
-            distanceKm(group.center, {
-              lat: district.center[0],
-              lon: district.center[1],
-            })
+            fallbackCenter
+              ? distanceKm(fallbackCenter, {
+                  lat: district.center[0],
+                  lon: district.center[1],
+                })
+              : 0
           )
           .filter(Number.isFinite);
         const spreadKm = Math.max(4, ...spreadDistances);
         const status =
           statusOverrides[group.id] || derivedStatus(group, Boolean(operationalRoutes[group.id]));
-        const coverage = coverageFromDistance(nearest.distance);
+        const epsCoverage = epsCoverageStatus(nearest.distance);
         const block = {
           ...group,
           districts: groupDistrictsWithUfds,
@@ -405,15 +466,15 @@ export default function Agrupacion() {
           nearestOrigin: nearest.origin,
           nearestOriginId: nearest.origin?.id || "",
           nearestOriginDistanceKm: nearest.distance,
-          coverage,
-          coverageLabel: coverageLabels[coverage],
+          epsCoverageKey: epsCoverage.key,
+          epsCoverageLabel: epsCoverage.label,
+          epsCoverageDescription: epsCoverage.description,
           status,
           statusLabel: statusLabels[status],
-          groupingCriterion: group.criterio_agrupacion || null,
           groupingExplanation: group.explicabilidad || null,
-          ufdsSummary: group.resumen_ufds || null,
         };
-        block.priorityLabel = priorityLabel(block);
+        block.groupType = groupTypeFor(block);
+        block.groupTypeLabel = groupTypeLabel(block.groupType);
         return block;
       })
       .filter((block) => block.districts.length > 0);
@@ -442,10 +503,35 @@ export default function Agrupacion() {
   }, [blocks, epsOrigins, statusOverrides]);
 
   const activeBlock = blockById.get(activeBlockId) || blocks[0] || null;
+  const detailNodes = useMemo(() => {
+    if (!activeBlock) return [];
+
+    return (activeBlock.validNodes || []).map((node) => {
+      const nearest = activeBlock.nearestOrigin
+        ? {
+            origin: activeBlock.nearestOrigin,
+            distance: distanceKm(node.center, activeBlock.nearestOrigin),
+          }
+        : nearestOrigin(node.center, epsOrigins);
+      const status = statusOverrides[node.id] || activeBlock.status;
+      return {
+        ...node,
+        blockId: activeBlock.id,
+        blockName: activeBlock.nombre,
+        nearestOrigin: nearest.origin || activeBlock.nearestOrigin,
+        nearestOriginId: nearest.origin?.id || activeBlock.nearestOriginId || "",
+        nearestOriginDistanceKm: Number.isFinite(nearest.distance)
+          ? nearest.distance
+          : activeBlock.nearestOriginDistanceKm,
+        status,
+        statusLabel: statusLabels[status],
+      };
+    });
+  }, [activeBlock, epsOrigins, statusOverrides]);
+
   const activeNode =
-    enrichedNodes.find((node) => node.id === activeNodeId) ||
-    enrichedNodes.find((node) => node.blockId === activeBlock?.id) ||
-    enrichedNodes[0] ||
+    detailNodes.find((node) => node.id === activeNodeId) ||
+    detailNodes[0] ||
     null;
 
   const routeNode = useMemo(() => {
@@ -467,15 +553,9 @@ export default function Agrupacion() {
 
   const options = useMemo(
     () => ({
-      blocks,
       epsOrigins,
-      groupingCriterion: blocks[0]?.groupingCriterion || null,
-      ufdsSummary: blocks[0]?.ufdsSummary || null,
-      priorities: [...new Set(blocks.map((block) => block.prioridad).filter(Boolean))].sort(
-        (a, b) => a - b
-      ),
     }),
-    [blocks, epsOrigins]
+    [epsOrigins]
   );
 
   const filteredBlocks = useMemo(() => {
@@ -491,36 +571,17 @@ export default function Agrupacion() {
         return false;
       }
       if (!matchesSizeBucket(block.cantidad_zonas || 0, filters.zoneSize)) return false;
-      if (!matchesSizeBucket(block.validNodes.length || 0, filters.nodeSize)) return false;
-      if (filters.priority !== "todos" && String(block.prioridad) !== String(filters.priority)) {
+      if (filters.groupType === "con-eps" && !block.nearestOrigin) return false;
+      if (filters.groupType === "sin-eps" && block.nearestOrigin) return false;
+      if (
+        !["todos", "con-eps", "sin-eps"].includes(filters.groupType) &&
+        block.groupType !== filters.groupType
+      ) {
         return false;
       }
       return true;
     });
   }, [blocks, filters]);
-
-  const filteredNodes = useMemo(() => {
-    const selectedBlockExists =
-      filters.blockId === "todos" || blocks.some((block) => block.id === filters.blockId);
-    const allowedBlockIds = new Set(
-      (filters.blockId === "todos" || !selectedBlockExists
-        ? blocks
-        : blocks.filter((block) => block.id === filters.blockId)
-      ).map(
-        (block) => block.id
-      )
-    );
-
-    return enrichedNodes.filter((node) => {
-      if (!allowedBlockIds.has(node.blockId)) return false;
-      if (filters.criticidad !== "todas" && node.criticidad !== filters.criticidad) return false;
-      if (filters.nodeStatus !== "todos" && node.status !== filters.nodeStatus) return false;
-      if (filters.epsOriginId !== "todos" && node.nearestOriginId !== filters.epsOriginId) {
-        return false;
-      }
-      return true;
-    });
-  }, [blocks, enrichedNodes, filters]);
 
   const searchedBlocks = useMemo(() => {
     const query = normalizeText(search);
@@ -545,27 +606,6 @@ export default function Agrupacion() {
       return (priorityRank[b.criticidad] || 0) - (priorityRank[a.criticidad] || 0);
     });
   }, [filteredBlocks, search, sortBy]);
-
-  const searchedNodes = useMemo(() => {
-    const query = normalizeText(search);
-    const result = !query
-      ? filteredNodes
-      : filteredNodes.filter((node) =>
-          normalizeText([
-            node.id,
-            node.nombre,
-            node.blockName,
-            node.provincia,
-            node.nearestOrigin?.prestador,
-          ].join(" ")).includes(query)
-        );
-
-    return [...result].sort((a, b) => {
-      if (sortBy === "interrupciones") return b.interrupciones - a.interrupciones;
-      if (sortBy === "distancia") return a.nearestOriginDistanceKm - b.nearestOriginDistanceKm;
-      return (priorityRank[b.criticidad] || 0) - (priorityRank[a.criticidad] || 0);
-    });
-  }, [filteredNodes, search, sortBy]);
 
   const routePlan = useMemo(
     () =>
@@ -727,7 +767,6 @@ export default function Agrupacion() {
         }
         if (value === "rutas") {
           next.zoneSize = "todos";
-          next.nodeSize = "todos";
           next.nodeStatus = "todos";
         }
       }
@@ -776,10 +815,12 @@ export default function Agrupacion() {
 
   function openGroupDetail(block) {
     if (!block?.id) return;
-    selectBlock(block.id);
+    setActiveBlockId(block.id);
+    setActiveNodeId(block.validNodes?.[0]?.id || "");
+    setSearch("");
     setFilters((current) => ({
       ...current,
-      blockId: "todos",
+      blockId: block.id,
       viewMode: "nodos",
       routeType: "grupal",
       routeStatus: "todos",
@@ -849,6 +890,13 @@ export default function Agrupacion() {
                 >
                   Nodos
                 </button>
+                <button
+                  type="button"
+                  className={filters.viewMode === "rutas" ? "active" : ""}
+                  onClick={() => switchMode("rutas", activeBlock)}
+                >
+                  Cobertura
+                </button>
               </div>
             </article>
 
@@ -856,7 +904,7 @@ export default function Agrupacion() {
               <TerritoryCoverageMap
                 viewMode={filters.viewMode}
                 blocks={activeBlock ? [activeBlock] : []}
-                nodes={searchedNodes}
+                nodes={detailNodes}
                 epsOrigins={epsOrigins}
                 activeBlock={activeBlock}
                 activeNode={activeNode}

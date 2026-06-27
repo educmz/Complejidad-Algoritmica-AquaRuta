@@ -401,11 +401,11 @@ export default function Dashboard() {
       items.push({
         id: "sin-nodo-cercano",
         level: "critica",
-        title: "Zona critica sin nodo cercano",
-        body: `${noNearbyOrigin[0].district.nombre} requiere validar abastecimiento EPS cercano.`,
+        title: "Zona crítica sin EPS cercana",
+        body: `${noNearbyOrigin[0].district.nombre} requiere validar una EPS de referencia más próxima antes de planificar atención.`,
         meta: noNearbyOrigin[0].nearest
-          ? `${noNearbyOrigin[0].nearest.distance.toFixed(1)} km al nodo referencial`
-          : "Sin nodo EPS referencial",
+          ? `${noNearbyOrigin[0].nearest.distance.toFixed(1)} km a la EPS de referencia`
+          : "Sin EPS de referencia",
         path: buildPath("/mapa", {
           modo: "ruta",
           distrito: noNearbyOrigin[0].district.id,
@@ -430,8 +430,8 @@ export default function Dashboard() {
       items.push({
         id: "sin-ruta-priorizada",
         level: "alta",
-        title: "Distrito sin ruta priorizada",
-        body: `${districtWithoutRoute.nombre} no aparece en escenarios priorizados DFS/BFS/backtracking.`,
+        title: "Zona sin recorrido priorizado",
+        body: `${districtWithoutRoute.nombre} aún no cuenta con una secuencia de atención priorizada. Revisa su exploración local.`,
         meta: "Abrir exploración local",
         path: buildPath("/exploracion-local", { distrito: districtWithoutRoute.id }),
       });
@@ -478,6 +478,7 @@ export default function Dashboard() {
       label: "Distritos afectados",
       value: formatNumber(filteredDistricts.length),
       helper: `${formatNumber(criticalDistricts.length)} críticos`,
+      description: "Zonas con interrupciones registradas en el periodo analizado.",
       tone: "blue",
       path: buildPath("/mapa", { modo: "ruta", distrito: rankedDistricts[0]?.id }),
     },
@@ -485,6 +486,8 @@ export default function Dashboard() {
       label: "Distritos críticos",
       value: formatNumber(criticalDistricts.length),
       helper: `${formatNumber(highPriorityDistricts.length)} en prioridad alta o crítica`,
+      description:
+        "Zonas con mayor impacto por interrupciones, conexiones afectadas o duración.",
       tone: "red",
       path: buildPath("/mapa", { modo: "ruta", distrito: criticalDistricts[0]?.id }),
     },
@@ -492,6 +495,7 @@ export default function Dashboard() {
       label: "Interrupciones totales",
       value: formatNumber(totalInterruptions),
       helper: `Prom. ${formatHours(averageDuration)} por evento`,
+      description: "Eventos de interrupción acumulados para los filtros seleccionados.",
       tone: "amber",
       path: buildPath("/mapa", { modo: "ruta" }),
     },
@@ -499,6 +503,7 @@ export default function Dashboard() {
       label: "Conexiones afectadas",
       value: formatCompact(totalConnections),
       helper: `${formatNumber(totalConnections)} registros acumulados`,
+      description: "Conexiones registradas dentro de las zonas afectadas.",
       tone: "teal",
       path: "/agrupacion",
     },
@@ -506,6 +511,7 @@ export default function Dashboard() {
       label: "Grupos operativos",
       value: formatNumber(visibleGroups.length),
       helper: `${formatNumber(groupedZones.length)} grupos generados`,
+      description: "Conjuntos de zonas que pueden analizarse juntas para planificar atención.",
       tone: "green",
       path: "/agrupacion",
     },
@@ -667,6 +673,7 @@ export default function Dashboard() {
               <span className="dashboard-kpi-label">{item.label}</span>
               <strong>{item.value}</strong>
               <span>{item.helper}</span>
+              <small>{item.description}</small>
             </button>
           ))}
         </section>
@@ -713,7 +720,9 @@ export default function Dashboard() {
               ))}
 
               {!rankedDistricts.length && (
-                <div className="empty-state">No hay distritos para los filtros activos.</div>
+                <div className="empty-state">
+                  No hay resultados para los filtros seleccionados.
+                </div>
               )}
             </div>
           </article>
@@ -723,7 +732,7 @@ export default function Dashboard() {
               <div>
                 <h3 className="panel-title">Alertas operativas</h3>
                 <p className="panel-subtitle">
-                  Acciones directas hacia mapa, sectorización y exploración local.
+                  Situaciones que requieren revisión antes de planificar rutas o sectores.
                 </p>
               </div>
             </div>
@@ -812,9 +821,9 @@ export default function Dashboard() {
             <article className="panel">
               <div className="dashboard-panel-heading">
                 <div>
-                  <h3 className="panel-title">Nodos de abastecimiento EPS</h3>
+                  <h3 className="panel-title">EPS de referencia</h3>
                   <p className="panel-subtitle">
-                    Orígenes disponibles y cobertura territorial asociada.
+                    Orígenes disponibles como referencia para planificar atención.
                   </p>
                 </div>
               </div>
@@ -840,7 +849,9 @@ export default function Dashboard() {
                 ))}
 
                 {!originCoverage.length && (
-                  <div className="empty-state">No hay nodos EPS para los filtros activos.</div>
+                  <div className="empty-state">
+                    No hay EPS de referencia para los filtros seleccionados.
+                  </div>
                 )}
               </div>
             </article>
