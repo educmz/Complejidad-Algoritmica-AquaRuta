@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pathlib import Path
 from typing import Any, Dict, List
 from datetime import datetime
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = Path(__file__).resolve().parent / "src"
 sys.path.insert(0, str(SRC))
 
+from services.grouping_service import GroupingConfigError, GroupingService
 from services.ors_service import ORSService, RouteConfig
 
 app = FastAPI()
@@ -47,6 +48,7 @@ logger = logging.getLogger("aquaruta.routes")
 route_lock = threading.Lock()
 last_route_request_at = 0.0
 ors_service = ORSService(RouteConfig.from_env(ROOT))
+grouping_service = GroupingService(ROOT)
 
 
 class RouteRequest(BaseModel):
@@ -58,6 +60,44 @@ class RouteRequest(BaseModel):
 
 class RouteBatchRequest(BaseModel):
     routes: List[RouteRequest]
+
+
+class GroupingFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    departamento: str | None = None
+    provincia: str | None = None
+    distrito: str | None = None
+    eps: str | None = None
+    criticidad: str | None = None
+
+
+class GroupingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    criterio: str = Field("combinado")
+    umbral_distancia_geografica_km: float = Field(18.0, ge=0.1, le=500.0)
+    umbral_distancia_vial_km: float = Field(32.0, ge=0.1, le=750.0)
+    umbral_tiempo_min: float = Field(70.0, ge=1.0, le=1440.0)
+    umbral_costo: float = Field(240.0, ge=1.0, le=100000.0)
+    velocidad_promedio_kmh: float = Field(28.0, ge=1.0, le=120.0)
+    factor_vial: float = Field(1.35, ge=1.0, le=5.0)
+    max_vecinos_candidatos: int = Field(12, ge=1, le=100)
+
+    @field_validator("criterio")
+    @classmethod
+    def validate_criterion(cls, value):
+        normalized = str(value or "").strip().lower()
+        if normalized not in {"geografico", "vial", "combinado"}:
+            raise ValueError("Criterio de agrupacion no permitido.")
+        return normalized
+
+
+class GroupingRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filters: GroupingFilters
+    config: GroupingConfig
 
 
 def _load_json(filename: str, fallback):
@@ -296,6 +336,23 @@ def get_routes_batch(payload: RouteBatchRequest):
 @app.get("/")
 def root():
     return {"message": "Backend AquaRuta activo"}
+
+
+@app.post("/grouping/run")
+def run_grouping(payload: GroupingRunRequest):
+    try:
+        return grouping_service.run(
+            filters=payload.filters.model_dump(),
+            config=payload.config.model_dump(),
+        )
+    except GroupingConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar agrupacion UFDS: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo calcular la agrupacion operativa.",
+        ) from exc
 
 
 @app.get("/dashboard")

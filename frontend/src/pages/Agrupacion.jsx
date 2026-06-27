@@ -6,12 +6,9 @@ import TerritoryCoverageMap from "../components/grouping/TerritoryCoverageMap";
 import TerritorySidePanel from "../components/grouping/TerritorySidePanel";
 import TerritoryResultsTable from "../components/grouping/TerritoryResultsTable";
 import { fetchRouteGeoJson } from "../services/mapApi";
+import { DEFAULT_GROUPING_CONFIG, runGrouping } from "../services/groupingApi";
 import { aquaRutaData } from "../data/aquaRutaData";
 import { epsCoverageStatus } from "../utils/epsCoverage";
-import {
-  DEFAULT_GROUPING_CONFIG,
-  buildGroupedZonesWithUfds,
-} from "../utils/ufdsGrouping";
 
 const priorityRank = { critica: 4, alta: 3, media: 2, baja: 1 };
 const statusLabels = {
@@ -324,7 +321,9 @@ function summaryFromGeoJson(geoJson) {
 
 export default function Agrupacion() {
   const [searchParams] = useSearchParams();
+  const groupingFilterKey = searchParams.toString();
   const districts = useMemo(() => aquaRutaData.districts || [], []);
+  const precalculatedGroupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
   const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
   const operationalRoutes = useMemo(() => aquaRutaData.operationalRoutes || {}, []);
   const initialCriterionFromData = useMemo(
@@ -334,23 +333,46 @@ export default function Agrupacion() {
   const [groupingConfig] = useState(() => ({
     ...DEFAULT_GROUPING_CONFIG,
     criterio: initialCriterionFromData?.criterio || DEFAULT_GROUPING_CONFIG.criterio,
-    umbralDistanciaGeograficaKm:
+    umbral_distancia_geografica_km:
       Number(initialCriterionFromData?.umbral_distancia_geografica_km) ||
-      DEFAULT_GROUPING_CONFIG.umbralDistanciaGeograficaKm,
-    umbralDistanciaVialKm:
+      DEFAULT_GROUPING_CONFIG.umbral_distancia_geografica_km,
+    umbral_distancia_vial_km:
       Number(initialCriterionFromData?.umbral_distancia_vial_km) ||
-      DEFAULT_GROUPING_CONFIG.umbralDistanciaVialKm,
-    umbralTiempoMin:
+      DEFAULT_GROUPING_CONFIG.umbral_distancia_vial_km,
+    umbral_tiempo_min:
       Number(initialCriterionFromData?.umbral_tiempo_min) ||
-      DEFAULT_GROUPING_CONFIG.umbralTiempoMin,
-    umbralCosto:
+      DEFAULT_GROUPING_CONFIG.umbral_tiempo_min,
+    umbral_costo:
       Number(initialCriterionFromData?.umbral_costo) ||
-      DEFAULT_GROUPING_CONFIG.umbralCosto,
+      DEFAULT_GROUPING_CONFIG.umbral_costo,
   }));
-  const groupedZones = useMemo(
-    () => buildGroupedZonesWithUfds(districts, groupingConfig),
-    [districts, groupingConfig]
+  const groupingFilters = useMemo(
+    () => {
+      const params = new URLSearchParams(groupingFilterKey);
+      return {
+        departamento: params.get("departamento") || null,
+        provincia: params.get("provincia") || null,
+        distrito: params.get("distrito_nombre") || null,
+        eps: params.get("eps") || null,
+        criticidad: params.get("criticidad") || null,
+      };
+    },
+    [groupingFilterKey]
   );
+  const groupingRequest = useMemo(
+    () => ({
+      filters: groupingFilters,
+      config: groupingConfig,
+    }),
+    [groupingConfig, groupingFilters]
+  );
+  const [groupedZones, setGroupedZones] = useState(precalculatedGroupedZones);
+  const [groupingStatus, setGroupingStatus] = useState(
+    precalculatedGroupedZones.length ? "idle" : "loading"
+  );
+  const [groupingError, setGroupingError] = useState("");
+  const [groupingSummary, setGroupingSummary] = useState(null);
+  const [groupingRunToken, setGroupingRunToken] = useState(0);
 
   const requestedGroupId = searchParams.get("grupo") || "";
   const requestedDistrictId = searchParams.get("distrito") || "";
@@ -386,6 +408,58 @@ export default function Agrupacion() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
   const [failedSubrouteIds, setFailedSubrouteIds] = useState([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => {
+      setGroupingStatus("loading");
+      setGroupingError("");
+    }, 0);
+
+    runGrouping(groupingRequest, { signal: controller.signal })
+      .then((payload) => {
+        const groups = payload.groups || [];
+        setGroupedZones(groups);
+        setGroupingSummary(payload.summary || null);
+        setGroupingStatus(groups.length ? "success" : "empty");
+
+        const groupIds = new Set(groups.map((group) => group.id));
+        const selectedStillExists = activeBlockId && groupIds.has(activeBlockId);
+        if (!selectedStillExists) {
+          const firstGroup = groups[0] || null;
+          setActiveBlockId(firstGroup?.id || "");
+          setActiveNodeId(firstGroup?.zona_ids?.[0] || "");
+          setIsDetailOpen(false);
+          setFilters((current) => ({
+            ...current,
+            blockId: firstGroup?.id || "todos",
+            viewMode: "grupos",
+          }));
+          return;
+        }
+
+        const selectedGroup = groups.find((group) => group.id === activeBlockId);
+        if (
+          activeNodeId &&
+          selectedGroup &&
+          !(selectedGroup.zona_ids || []).includes(activeNodeId)
+        ) {
+          setActiveNodeId(selectedGroup.zona_ids?.[0] || "");
+        }
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setGroupedZones([]);
+        setGroupingSummary(null);
+        setGroupingStatus("error");
+        setGroupingError(error?.message || "No se pudo calcular la agrupacion operativa.");
+      });
+
+    return () => {
+      window.clearTimeout(loadingTimer);
+      controller.abort();
+    };
+  }, [activeBlockId, activeNodeId, groupingRequest, groupingRunToken]);
 
   const blocks = useMemo(() => {
     return groupedZones
@@ -810,6 +884,10 @@ export default function Agrupacion() {
     setSortBy("criticidad");
   }
 
+  function retryGrouping() {
+    setGroupingRunToken((current) => current + 1);
+  }
+
   function switchMode(mode, block = activeBlock) {
     setFilters((current) => ({
       ...current,
@@ -879,15 +957,42 @@ export default function Agrupacion() {
               onReset={resetFilters}
             />
 
-            <TerritoryResultsTable
-              blocks={searchedBlocks}
-              activeBlockId={activeBlock?.id}
-              search={search}
-              sortBy={sortBy}
-              onSearchChange={setSearch}
-              onSortChange={setSortBy}
-              onOpenGroup={openGroupDetail}
-            />
+            {groupingStatus === "loading" && (
+              <div className="empty-state">
+                Calculando grupos operativos...
+              </div>
+            )}
+
+            {groupingStatus === "error" && (
+              <div className="empty-state">
+                <p>{groupingError || "No se pudo calcular la agrupacion operativa."}</p>
+                <button type="button" onClick={retryGrouping}>Reintentar</button>
+              </div>
+            )}
+
+            {groupingStatus === "empty" && (
+              <div className="empty-state">
+                No hay distritos que coincidan con los filtros seleccionados.
+              </div>
+            )}
+
+            {groupingStatus === "success" && groupingSummary && (
+              <div className="empty-state">
+                {groupingSummary.groupCount} grupos recalculados desde {groupingSummary.districtCount} distritos.
+              </div>
+            )}
+
+            {groupingStatus !== "error" && groupingStatus !== "empty" && (
+              <TerritoryResultsTable
+                blocks={searchedBlocks}
+                activeBlockId={activeBlock?.id}
+                search={search}
+                sortBy={sortBy}
+                onSearchChange={setSearch}
+                onSortChange={setSortBy}
+                onOpenGroup={openGroupDetail}
+              />
+            )}
           </>
         ) : (
           <>
