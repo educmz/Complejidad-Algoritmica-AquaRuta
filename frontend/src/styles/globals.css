@@ -966,6 +966,12 @@ img {
   font-size: 0.84rem;
 }
 
+.dashboard-kpi-card small {
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
 .dashboard-kpi-label {
   color: #334155 !important;
   font-weight: 800;
@@ -2279,6 +2285,47 @@ img {
   color: var(--text-secondary);
 }
 
+.territory-eps-status,
+.territory-eps-card .territory-eps-status {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 4px 8px;
+  width: fit-content;
+}
+
+.territory-eps-status.local {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.territory-eps-status.externa {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #075985;
+}
+
+.territory-eps-status.lejana {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.territory-eps-status.no_viable {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.territory-eps-status.sin_eps {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
 .territory-route-status {
   background: #ecfdf5;
   border-color: #bbf7d0;
@@ -2286,6 +2333,24 @@ img {
 
 .territory-route-status strong {
   color: #047857;
+}
+
+.territory-route-status.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.territory-route-status.warning strong {
+  color: #92400e;
+}
+
+.territory-route-status.unavailable {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.territory-route-status.unavailable strong {
+  color: #991b1b;
 }
 
 .territory-warning-card {
@@ -2500,6 +2565,13 @@ img {
   padding: 8px 10px;
 }
 
+.territory-zones-note {
+  color: #475569;
+  font-size: 0.82rem;
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .territory-zones-list {
   display: flex;
   flex-wrap: wrap;
@@ -2507,6 +2579,45 @@ img {
   grid-column: 1 / -1;
   max-height: 220px;
   overflow: auto;
+}
+
+.territory-group-type {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1.2;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.territory-group-type.sectorizable {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.territory-group-type.individual {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #075985;
+}
+
+.territory-group-type.sin-georreferenciacion {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.territory-context-note {
+  background: #f8fafc;
+  border-left: 3px solid #0f766e;
+  color: #475569;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 9px 10px;
 }
 
 .territory-results-scroll {
@@ -2751,7 +2862,7 @@ img {
 
 .route-control-stack {
   align-items: end;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(190px, 1.1fr) minmax(170px, 0.9fr) minmax(190px, 1fr);
+  grid-template-columns: minmax(130px, 0.9fr) minmax(140px, 0.95fr) minmax(170px, 1.05fr) minmax(132px, 0.8fr) minmax(112px, 0.7fr) minmax(165px, 0.95fr) 132px;
 }
 
 .route-explorer-controls {
@@ -3224,7 +3335,7 @@ img {
 .local-control-stack {
   align-items: end;
   gap: 8px;
-  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(180px, 0.85fr) minmax(180px, 0.8fr);
+  grid-template-columns: minmax(170px, 1fr) minmax(180px, 1fr) minmax(150px, 0.85fr) minmax(130px, 0.75fr) minmax(150px, 0.85fr);
 }
 
 .local-control-stack .control-group {

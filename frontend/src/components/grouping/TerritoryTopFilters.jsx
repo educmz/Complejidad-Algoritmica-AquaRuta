@@ -8,9 +8,19 @@ const criticityOptions = [
 
 const sizeOptions = [
   ["todos", "Todas"],
-  ["pequeno", "1 a 5"],
-  ["mediano", "6 a 15"],
-  ["grande", "16 o más"],
+  ["individual", "1 zona (grupo individual)"],
+  ["pequeno", "2 a 5 zonas"],
+  ["mediano", "6 a 15 zonas"],
+  ["grande", "16 o más zonas"],
+];
+
+const groupTypeOptions = [
+  ["todos", "Todos"],
+  ["sectorizable", "Sectorizables"],
+  ["individual", "Individuales"],
+  ["sin-georreferenciacion", "Sin georreferenciación"],
+  ["con-eps", "Con EPS de referencia"],
+  ["sin-eps", "Sin EPS de referencia"],
 ];
 
 function SelectField({ label, value, options, onChange }) {
@@ -45,18 +55,15 @@ export default function TerritoryTopFilters({
       `${origin.prestador} - ${origin.distrito}`,
     ]),
   ];
-  const priorityOptions = [
-    ["todos", "Todas"],
-    ...options.priorities.map((priority) => [String(priority), `Prioridad ${priority}`]),
-  ];
-
   return (
     <article className="territory-filter-panel territory-list-header">
       <div className="territory-filter-header">
         <div>
           <h2>Seleccionar grupo operativo</h2>
           <span>
-            Compara grupos por criticidad, zonas, cobertura y EPS sugerida antes de abrir el detalle.
+            Un grupo operativo reúne zonas afectadas que pueden analizarse juntas según criticidad,
+            cercanía, cobertura EPS y cantidad de zonas. Los grupos individuales representan zonas
+            que se atienden de forma independiente.
           </span>
         </div>
       </div>
@@ -69,7 +76,7 @@ export default function TerritoryTopFilters({
           onChange={(value) => onFilterChange("criticidad", value)}
         />
         <SelectField
-          label="EPS sugerida"
+          label="EPS de referencia"
           value={filters.epsOriginId}
           options={epsOptions}
           onChange={(value) => onFilterChange("epsOriginId", value)}
@@ -81,10 +88,10 @@ export default function TerritoryTopFilters({
           onChange={(value) => onFilterChange("zoneSize", value)}
         />
         <SelectField
-          label="Prioridad"
-          value={filters.priority}
-          options={priorityOptions}
-          onChange={(value) => onFilterChange("priority", value)}
+          label="Tipo de grupo"
+          value={filters.groupType}
+          options={groupTypeOptions}
+          onChange={(value) => onFilterChange("groupType", value)}
         />
         <button type="button" className="territory-clear-button" onClick={onReset}>
           Limpiar filtros

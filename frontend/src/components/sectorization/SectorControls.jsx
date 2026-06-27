@@ -50,7 +50,7 @@ export default function SectorControls({
         </div>
 
         <div className="control-group">
-          <label className="control-label">Cantidad de sectores</label>
+          <label className="control-label">Número de sectores a generar</label>
           <select
             className="control-select"
             value={sectorCount}

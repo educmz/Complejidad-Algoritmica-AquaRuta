@@ -23,7 +23,9 @@ function formatHours(value) {
 }
 
 function formatKm(value) {
-  return `${(Number(value) || 0).toFixed(1)} km`;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "No calculable";
+  return `${number.toFixed(1)} km`;
 }
 
 function formatMinutes(value) {
@@ -43,6 +45,54 @@ function ZoneList({ zones = [] }) {
   );
 }
 
+function EpsReferenceCard({ block, origin, distance }) {
+  const coverageKey = block?.epsCoverageKey || "sin_eps";
+  const coverageLabel = block?.epsCoverageLabel || "Sin EPS viable";
+  const coverageDescription =
+    block?.epsCoverageDescription ||
+    "No se encontró una EPS de referencia con datos suficientes.";
+  const location = [origin?.distrito, origin?.provincia].filter(Boolean).join(", ");
+  const isDistant = coverageKey === "lejana";
+  const isNotViable = coverageKey === "no_viable" || coverageKey === "sin_eps";
+
+  return (
+    <>
+      <div className="territory-eps-card">
+        <span>EPS de referencia</span>
+        <strong>{origin?.prestador || "No disponible"}</strong>
+        <small>{location || "Origen no asignado"}</small>
+        <small>{formatKm(distance)}</small>
+        <span className={`territory-eps-status ${coverageKey}`}>{coverageLabel}</span>
+        <small>{coverageDescription}</small>
+      </div>
+
+      {isDistant && (
+        <div className="territory-route-status warning">
+          <strong>Validación operativa requerida</strong>
+          <span>
+            La EPS de referencia está lejos del grupo. Esta asignación debe validarse antes de
+            usarla como origen operativo.
+            {block?.groupType === "individual"
+              ? " La atención individual requiere revisar un origen EPS más cercano o validar disponibilidad operativa."
+              : block?.groupType === "sectorizable"
+              ? " El grupo sigue siendo sectorizable territorialmente, pero su EPS de referencia requiere validación."
+              : ""}
+          </span>
+        </div>
+      )}
+
+      {isNotViable && (
+        <div className="territory-route-status unavailable">
+          <strong>Sin EPS viable</strong>
+          <span>
+            No se encontró una EPS viable para este grupo con la información disponible.
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function TerritorySidePanel({
   viewMode,
   block,
@@ -53,12 +103,21 @@ export default function TerritorySidePanel({
   routeError,
 }) {
   if (viewMode === "nodos" && node) {
-    const isConnected = !node.ufds?.aislado;
+    const isIndividualGroup =
+      block &&
+      ((block.cantidad_zonas || block.districts?.length) === 1 ||
+        block.validNodes?.length === 1);
+    const nodeStatus = isIndividualGroup
+      ? "Grupo individual"
+      : node.ufds?.aislado
+      ? "Revisar"
+      : "Integrado";
+    const referenceOrigin = block?.nearestOrigin || node.nearestOrigin;
 
     return (
       <aside className="territory-side-panel">
         <div className="territory-side-header">
-          <span>Nodo seleccionado</span>
+          <span>Zona seleccionada</span>
           <h3>{node.nombre}</h3>
           <p>{node.provincia}, {node.departamento}</p>
         </div>
@@ -69,7 +128,11 @@ export default function TerritorySidePanel({
             <strong>{node.blockName}</strong>
           </div>
           <div>
-            <span>Prioridad</span>
+            <span>Tipo de grupo</span>
+            <strong>{block?.groupTypeLabel || nodeStatus}</strong>
+          </div>
+          <div>
+            <span>Criticidad</span>
             <strong>{node.criticidad}</strong>
           </div>
           <div>
@@ -85,16 +148,22 @@ export default function TerritorySidePanel({
             <strong>{formatKm(node.nearestOriginDistanceKm)}</strong>
           </div>
           <div>
-            <span>Estado del nodo</span>
-            <strong>{isConnected ? "Integrado" : "Revisar"}</strong>
+            <span>Estado de la zona</span>
+            <strong>{nodeStatus}</strong>
           </div>
         </div>
 
-        <div className="territory-eps-card">
-          <span>EPS sugerida</span>
-          <strong>{node.nearestOrigin?.prestador || "No disponible"}</strong>
-          <small>{node.nearestOrigin?.distrito || "Origen no asignado"}</small>
-        </div>
+        {isIndividualGroup && (
+          <p className="territory-context-note">
+            Este grupo se atiende como unidad independiente y no requiere sectorización.
+          </p>
+        )}
+
+        <EpsReferenceCard
+          block={block}
+          origin={referenceOrigin}
+          distance={block?.nearestOriginDistanceKm ?? node.nearestOriginDistanceKm}
+        />
 
         {block && <ZoneList zones={block.zonas || []} />}
       </aside>
@@ -166,6 +235,10 @@ export default function TerritorySidePanel({
     );
   }
 
+  const hasInvalidOnly =
+    (block.validNodes?.length || 0) === 0 &&
+    (block.invalidNodes?.length || 0) > 0;
+
   return (
     <aside className="territory-side-panel">
       <div className="territory-side-header">
@@ -178,8 +251,8 @@ export default function TerritorySidePanel({
 
       <div className="territory-side-grid compact">
         <div>
-          <span>Prioridad</span>
-          <strong>{block.prioridad || "S/D"}</strong>
+          <span>Tipo</span>
+          <strong>{block.groupTypeLabel}</strong>
         </div>
         <div>
           <span>Zonas</span>
@@ -199,15 +272,37 @@ export default function TerritorySidePanel({
         </div>
         <div>
           <span>Cobertura EPS</span>
-          <strong>{block.coverageLabel}</strong>
+          <strong>{block.epsCoverageLabel}</strong>
         </div>
       </div>
 
-      <div className="territory-eps-card">
-        <span>EPS sugerida</span>
-        <strong>{block.nearestOrigin?.prestador || "No disponible"}</strong>
-        <small>{formatKm(block.nearestOriginDistanceKm)} al centro del grupo</small>
-      </div>
+      <EpsReferenceCard
+        block={block}
+        origin={block.nearestOrigin}
+        distance={block.nearestOriginDistanceKm}
+      />
+
+      {hasInvalidOnly && (
+        <div className="territory-route-status">
+          <strong>Coordenadas no disponibles</strong>
+          <span>
+            Este grupo tiene zonas registradas, pero no cuenta con centro geográfico válido para
+            mostrar nodos en el mapa.
+          </span>
+        </div>
+      )}
+
+      {block.groupType === "individual" && (
+        <p className="territory-context-note">
+          No sectorizable: grupo individual. Se atiende como una unidad independiente.
+        </p>
+      )}
+
+      {block.groupType === "sin-georreferenciacion" && (
+        <p className="territory-context-note">
+          No sectorizable: faltan coordenadas geográficas válidas.
+        </p>
+      )}
 
       <ZoneList zones={block.zonas || []} />
     </aside>

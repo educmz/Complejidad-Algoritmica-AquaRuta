@@ -135,7 +135,7 @@ function MapViewportController({ focusKey, focusPoints, routeKey, routePoints })
           fitMapToPoints(map, focusPoints);
         }}
       >
-        Ajustar sector
+        Ver sector
       </button>
       <button
         type="button"
@@ -145,7 +145,7 @@ function MapViewportController({ focusKey, focusPoints, routeKey, routePoints })
         }}
         disabled={!routePoints.length}
       >
-        Ajustar secuencia
+        Ver secuencia
       </button>
     </div>
   );

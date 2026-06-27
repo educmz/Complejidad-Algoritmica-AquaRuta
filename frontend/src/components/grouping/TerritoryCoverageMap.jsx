@@ -108,7 +108,17 @@ function fitMapToPoints(map, points, options = {}) {
   });
 }
 
-function MapViewportController({ focusKey, focusPoints, groupPoints, routeKey, routePoints }) {
+function MapViewportController({
+  focusKey,
+  focusPoints,
+  groupPoints,
+  coveragePoints,
+  hasReferenceOrigin,
+  referenceNeedsValidation,
+  onShowReferenceEps,
+  routeKey,
+  routePoints,
+}) {
   const map = useMap();
   const controlsRef = useRef(null);
   const lastFocusKeyRef = useRef("");
@@ -151,32 +161,31 @@ function MapViewportController({ focusKey, focusPoints, groupPoints, routeKey, r
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          userHasInteractedRef.current = false;
-          fitMapToPoints(map, focusPoints);
-        }}
-      >
-        Recentrar mapa
-      </button>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
           fitMapToPoints(map, groupPoints);
         }}
         disabled={!groupPoints.length}
+        title={!groupPoints.length ? "Sin coordenadas disponibles" : "Enfocar nodos del grupo"}
       >
-        Ajustar a grupo
+        Ver grupo
       </button>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          fitMapToPoints(map, routePoints, { maxZoom: 13 });
-        }}
-        disabled={!routePoints.length}
-      >
-        Ajustar a cobertura
-      </button>
+      {hasReferenceOrigin && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onShowReferenceEps();
+            fitMapToPoints(map, coveragePoints, { maxZoom: 13 });
+          }}
+          disabled={!coveragePoints.length}
+          title={
+            referenceNeedsValidation
+              ? "EPS lejana: requiere validación operativa"
+              : "Mostrar el grupo y su EPS de referencia"
+          }
+        >
+          Ver EPS de referencia
+        </button>
+      )}
     </div>
   );
 }
@@ -191,6 +200,13 @@ function ZoomTracker({ onZoomChange }) {
   }, [map, onZoomChange]);
 
   return null;
+}
+
+function blockCoverageRadius(block) {
+  const isSingleNodeGroup =
+    (block?.validNodes?.length || block?.cantidad_zonas || 0) <= 1;
+
+  return isSingleNodeGroup ? 1600 : Math.max(4500, (block?.spreadKm || 0) * 1000);
 }
 
 function routeMarkerStyle(node, routeResult) {
@@ -223,6 +239,9 @@ export default function TerritoryCoverageMap({
   onSelectNode,
 }) {
   const [zoom, setZoom] = useState(7);
+  const [shownReferenceKey, setShownReferenceKey] = useState("");
+  const referenceViewKey = `${activeBlock?.id || ""}|${viewMode}`;
+  const showReferenceEps = shownReferenceKey === referenceViewKey;
   const visibleBlocks = blocks.slice(0, 120);
   const activeGroupNodes = useMemo(
     () => activeBlock?.validNodes || activeBlock?.districts?.filter((node) => node.center) || [],
@@ -238,6 +257,12 @@ export default function TerritoryCoverageMap({
       return routeNodes.filter(
         (node, index, items) => items.findIndex((item) => item.id === node.id) === index
       );
+    }
+    if (activeBlock) {
+      const activeBlockNodes = nodes.filter(
+        (node) => node.blockId === activeBlock.id || activeBlock.districtIds?.has(node.id)
+      );
+      return activeBlockNodes.length ? activeBlockNodes : activeGroupNodes;
     }
     if (zoom < 8 && !activeBlock) return [];
     return nodes.slice(0, zoom < 9 ? 250 : 1200);
@@ -256,11 +281,13 @@ export default function TerritoryCoverageMap({
     [routePlan, routeResult]
   );
   const routeFocusPoints = routeGeoJsonPoints.length ? routeGeoJsonPoints : routeStopPoints;
-  const groupFocusPoints = [
-    ...(activeBlock?.center ? [activeBlock.center] : []),
-    ...activeGroupNodes.map((node) => node.center).filter(Boolean),
-    ...(activeBlock?.nearestOrigin ? [[activeBlock.nearestOrigin.lat, activeBlock.nearestOrigin.lon]] : []),
-  ];
+  const groupFocusPoints = activeGroupNodes.map((node) => node.center).filter(Boolean);
+  const coverageFocusPoints = [
+    ...groupFocusPoints,
+    ...(activeBlock?.nearestOrigin
+      ? [[activeBlock.nearestOrigin.lat, activeBlock.nearestOrigin.lon]]
+      : []),
+  ].filter(Boolean);
   const focusPoints = [
     ...(viewMode === "rutas" ? routeFocusPoints : []),
     ...(viewMode === "grupos" ? groupFocusPoints : []),
@@ -275,9 +302,18 @@ export default function TerritoryCoverageMap({
     routePlan?.id || "",
   ].join("|");
   const initialCenter = focusPoints[0] || [-12.0464, -77.0428];
+  const hasViableReference =
+    Boolean(activeBlock?.nearestOrigin) &&
+    ["local", "externa", "lejana"].includes(activeBlock?.epsCoverageKey);
   const epsToRender =
     viewMode === "rutas" && routePlan?.origin
       ? [routePlan.origin]
+      : activeBlock && viewMode === "nodos"
+      ? showReferenceEps && hasViableReference
+        ? [activeBlock.nearestOrigin]
+        : []
+      : activeBlock
+      ? []
       : epsOrigins.slice(0, 80);
 
   return (
@@ -310,6 +346,10 @@ export default function TerritoryCoverageMap({
             focusKey={focusKey}
             focusPoints={focusPoints}
             groupPoints={groupFocusPoints}
+            coveragePoints={coverageFocusPoints}
+            hasReferenceOrigin={hasViableReference}
+            referenceNeedsValidation={activeBlock?.epsCoverageKey === "lejana"}
+            onShowReferenceEps={() => setShownReferenceKey(referenceViewKey)}
             routeKey={routeKey}
             routePoints={routeFocusPoints}
           />
@@ -323,10 +363,10 @@ export default function TerritoryCoverageMap({
 
               return (
                 <Circle
-                  key={`block-area-${block.id}`}
-                  center={block.center}
-                  radius={Math.max(4500, block.spreadKm * 1000)}
-                  eventHandlers={{ click: () => onSelectBlock(block.id) }}
+  key={`block-area-${block.id}`}
+  center={block.center}
+  radius={blockCoverageRadius(block)}
+  eventHandlers={{ click: () => onSelectBlock(block.id) }}
                   pathOptions={{
                     color: colors.stroke,
                     fillColor: colors.fill,
@@ -361,7 +401,7 @@ export default function TerritoryCoverageMap({
                     Zonas: {block.zonas?.slice(0, 4).join(", ")}
                     {block.zonas?.length > 4 ? "..." : ""}
                     <br />
-                    EPS sugerida: {block.nearestOrigin?.prestador || "No disponible"}
+                    EPS de referencia: {block.nearestOrigin?.prestador || "No disponible"}
                   </Popup>
                 </Marker>
               );
@@ -370,10 +410,21 @@ export default function TerritoryCoverageMap({
           {layers.showNodes &&
             viewMode !== "rutas" &&
             visibleNodes.map((node) => {
+              if (
+                !Array.isArray(node.center) ||
+                node.center.length < 2 ||
+                !node.center.every(Number.isFinite)
+              ) {
+                return null;
+              }
               const colors = priorityColors[node.criticidad] || priorityColors.baja;
               const isActive = activeNode?.id === node.id;
               const isActiveGroupNode = activeBlock?.districtIds?.has(node.id);
-              const isIsolated = Boolean(node.ufds?.aislado);
+              const isIndividualGroup =
+                activeBlock &&
+                ((activeBlock.cantidad_zonas || activeBlock.districts?.length) === 1 ||
+                  activeBlock.validNodes?.length === 1);
+              const isIsolated = !isIndividualGroup && Boolean(node.ufds?.aislado);
               return (
                 <CircleMarker
                   key={node.id}
@@ -393,14 +444,24 @@ export default function TerritoryCoverageMap({
                   }}
                 >
                   <Tooltip direction="top" opacity={0.92}>
-                    {node.nombre} - {isIsolated ? "revisar integración" : node.blockName || activeBlock?.nombre}
+                    {node.nombre} -{" "}
+                    {isIndividualGroup
+                      ? "grupo individual"
+                      : isIsolated
+                      ? "revisar integración"
+                      : node.blockName || activeBlock?.nombre}
                   </Tooltip>
                   <Popup>
                     <strong>{node.nombre}</strong>
                     <br />
                     Grupo: {node.blockName || activeBlock?.nombre}
                     <br />
-                    Integración: {isIsolated ? "sin conexión suficiente" : "integrado al grupo"}
+                    Integración:{" "}
+                    {isIndividualGroup
+                      ? "sin enlace requerido"
+                      : isIsolated
+                      ? "sin conexión suficiente"
+                      : "integrado al grupo"}
                     <br />
                     Cercanos evaluados: {node.ufds?.candidatos_evaluados || 0}
                     <br />
@@ -428,12 +489,12 @@ export default function TerritoryCoverageMap({
             ))}
 
           {viewMode === "rutas" &&
-            layers.showBlocks &&
-            activeBlock?.center && (
-              <Circle
-                center={activeBlock.center}
-                radius={Math.max(4500, activeBlock.spreadKm * 1000)}
-                pathOptions={{
+  layers.showBlocks &&
+  activeBlock?.center && (
+    <Circle
+      center={activeBlock.center}
+      radius={blockCoverageRadius(activeBlock)}
+      pathOptions={{
                   color: "#0f766e",
                   fillColor: "#14b8a6",
                   fillOpacity: 0.07,
@@ -460,6 +521,13 @@ export default function TerritoryCoverageMap({
           {viewMode === "rutas" &&
             layers.showNodes &&
             visibleNodes.map((node, index) => {
+              if (
+                !Array.isArray(node.center) ||
+                node.center.length < 2 ||
+                !node.center.every(Number.isFinite)
+              ) {
+                return null;
+              }
               const markerStyle = routeMarkerStyle(node, routeResult);
               const isActive = activeNode?.id === node.id;
               return (
@@ -497,6 +565,10 @@ export default function TerritoryCoverageMap({
         <span>
           {viewMode === "grupos"
             ? `${visibleBlocks.length} grupos`
+            : activeBlock
+            ? `${visibleNodes.length} nodos georreferenciados / ${
+                activeBlock.cantidad_zonas || 0
+              } ${visibleNodes.length === 0 ? "zonas registradas" : "zonas"}`
             : `${visibleNodes.length} nodos renderizados`}
         </span>
         {viewMode === "rutas" && <strong>{routeStatus}</strong>}

@@ -74,7 +74,7 @@ export default function DistrictSubgraphView({
           <div>
             <div className="list-title">{graph.origin.prestador}</div>
             <div className="list-subtitle">
-              EPS sugerida · {graph.origin.distrito}, {graph.origin.provincia}
+              EPS de referencia · {graph.origin.distrito}, {graph.origin.provincia}
             </div>
           </div>
           <div className="text-right">
