@@ -28,3 +28,7 @@ desktop.ini
 # Temporales
 *.log
 *.tmp
+.tmp_pycache/
+
+# Cache de rutas
+data/cache/

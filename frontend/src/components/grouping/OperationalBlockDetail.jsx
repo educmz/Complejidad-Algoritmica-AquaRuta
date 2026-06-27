@@ -66,8 +66,12 @@ export default function OperationalBlockDetail({
           <strong>{formatNumber(block.interrupciones)}</strong>
         </div>
         <div>
-          <span>Unidades afectadas</span>
+          <span>Personas afectadas estimadas</span>
           <strong>{formatCompact(block.estimatedPopulation)}</strong>
+        </div>
+        <div>
+          <span>Peso demanda familiar</span>
+          <strong>{Number(block.demandWeight || 0).toFixed(3)}</strong>
         </div>
         <div>
           <span>Conexiones afectadas</span>
@@ -127,7 +131,7 @@ export default function OperationalBlockDetail({
         <strong>Criterio de criticidad</strong>
         <span>
           La etiqueta combina volumen de interrupciones, concentración territorial,
-          unidades afectadas, conexiones comprometidas y tiempos sin servicio.
+          personas afectadas estimadas, conexiones comprometidas y tiempos sin servicio.
         </span>
       </div>
 

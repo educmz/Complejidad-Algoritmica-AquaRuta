@@ -54,7 +54,8 @@ export default function OperationalBlockTable({
             <option value="criticidad">Ordenar por criticidad</option>
             <option value="interrupciones">Interrupciones</option>
             <option value="zonas">Cantidad de zonas</option>
-            <option value="poblacion">Unidades afectadas</option>
+            <option value="poblacion">Personas estimadas</option>
+            <option value="demanda">Peso demanda familiar</option>
             <option value="distancia">Distancia al nodo</option>
           </select>
         </div>
@@ -68,7 +69,8 @@ export default function OperationalBlockTable({
               <th>Ámbito</th>
               <th>Zonas</th>
               <th>Interrupciones</th>
-              <th>Unidades afectadas</th>
+              <th>Personas estimadas</th>
+              <th>Peso demanda</th>
               <th>Nodo sugerido</th>
               <th>Estado</th>
               <th>Acciones</th>
@@ -96,6 +98,7 @@ export default function OperationalBlockTable({
                   <td>{formatNumber(block.cantidad_zonas)}</td>
                   <td>{formatNumber(block.interrupciones)}</td>
                   <td>{formatCompact(block.estimatedPopulation)}</td>
+                  <td>{Number(block.demandWeight || 0).toFixed(3)}</td>
                   <td>
                     <span>{block.nearestOrigin?.prestador || "No disponible"}</span>
                     <small>{block.nearestOriginDistanceKm.toFixed(1)} km</small>

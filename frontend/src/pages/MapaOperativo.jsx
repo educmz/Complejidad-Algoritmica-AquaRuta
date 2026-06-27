@@ -32,6 +32,7 @@ const criterionLabels = {
   distancia: "menor distancia",
   tiempo: "menor tiempo",
   costo: "menor costo",
+  fragilidad: "menor fragilidad",
 };
 
 const DEFAULT_SECTOR_CRITERION = "mixto";
@@ -76,6 +77,11 @@ function formatMoney(value) {
   return `S/ ${(Number(value) || 0).toFixed(2)}`;
 }
 
+function formatDecimal(value) {
+  if (!Number.isFinite(Number(value))) return "No disponible";
+  return Number(value).toFixed(3);
+}
+
 function summaryDistanceKm(geoJson) {
   const summary = geoJson?.features?.[0]?.properties?.summary;
   if (!summary) return null;
@@ -92,8 +98,19 @@ function featureToCollection(feature, source) {
   return {
     type: "FeatureCollection",
     bbox: source?.bbox,
+    metrics: source?.metrics,
     features: [feature],
   };
+}
+
+function routeMetricsFromPayload(payload) {
+  return payload?.metrics || payload?.route_metrics || null;
+}
+
+function routeGeoJsonFromBatchItem(item) {
+  if (!item) return null;
+  if (item.ok === false) return null;
+  return item.result || item.geoJson || item;
 }
 
 function splitRouteAlternatives(geoJson, options = {}) {
@@ -105,6 +122,7 @@ function splitRouteAlternatives(geoJson, options = {}) {
     nombre: `Ruta candidata ${nameOffset + index + 1}`,
     via,
     geoJson: featureToCollection(feature, geoJson),
+    routeMetrics: routeMetricsFromPayload(geoJson),
     timeFactor: 1,
     costFactor: 1,
     speedKmh: 34,
@@ -154,6 +172,11 @@ function routeIntersectionNodes(routes, limit = 36) {
 function routeScore(route, criterion) {
   if (criterion === "tiempo") return route.timeMin || 0;
   if (criterion === "costo") return route.cost || 0;
+  if (criterion === "fragilidad") {
+    return Number.isFinite(Number(route.routeFragilityPenalty))
+      ? Number(route.routeFragilityPenalty)
+      : route.cost || 0;
+  }
   return route.distanceKm || 0;
 }
 
@@ -581,23 +604,39 @@ export default function MapaOperativo() {
       const geoJson = route.geoJson;
       const distanceKmValue = summaryDistanceKm(geoJson) || 0;
       const timeMin = summaryDurationMin(geoJson);
+      const routeMetrics = route.routeMetrics || routeMetricsFromPayload(geoJson) || {};
       const metrics = timeMin
         ? {
             distanceKm: distanceKmValue,
             timeMin,
-            cost: distanceKmValue * 3.8 + timeMin * 0.18,
+            cost:
+              Number(routeMetrics.operationalCost) ||
+              Number(routeMetrics.costo_operativo) ||
+              distanceKmValue * 3.8 + timeMin * 0.18,
           }
         : buildRouteMetrics(distanceKmValue, route);
       return {
         ...route,
         geoJson,
         ...metrics,
+        routeFragilityPenalty:
+          routeMetrics.routeFragilityPenalty ??
+          routeMetrics.penalizacion_fragilidad_ruta ??
+          null,
+        edgeOperationalWeight:
+          routeMetrics.edgeOperationalWeight ?? routeMetrics.peso_operativo_arista ?? null,
+        routeMetricsSource: routeMetrics.source || routeMetrics.route_metrics_source || "",
+        routeMetricsCached: Boolean(routeMetrics.cached || routeMetrics.route_metrics_cached),
       };
     });
     const bestByMetric = {
       distancia: [...routes].sort((a, b) => a.distanceKm - b.distanceKm)[0]?.id,
       tiempo: [...routes].sort((a, b) => a.timeMin - b.timeMin)[0]?.id,
       costo: [...routes].sort((a, b) => a.cost - b.cost)[0]?.id,
+      fragilidad: [...routes].sort(
+        (a, b) =>
+          Number(a.routeFragilityPenalty ?? 999) - Number(b.routeFragilityPenalty ?? 999)
+      )[0]?.id,
     };
     return [...routes]
       .map((route) => {
@@ -650,6 +689,8 @@ export default function MapaOperativo() {
       const routeRequests = [
         {
           coordinates: selectedRouteCoordinates,
+          source: selectedOrigin?.id || selectedOrigin?.prestador || "",
+          target: selectedDestination?.id || selectedDestination?.nombre || "",
           alternativeRoutes: {
             target_count: ORS_MAX_ALTERNATIVE_ROUTES,
             share_factor: 0.6,
@@ -665,11 +706,15 @@ export default function MapaOperativo() {
             [secondRouteWaypoint.center[1], secondRouteWaypoint.center[0]],
             [selectedDestination.center[1], selectedDestination.center[0]],
           ],
+          source: selectedOrigin?.id || selectedOrigin?.prestador || "",
+          target: selectedDestination?.id || selectedDestination?.nombre || "",
         });
       }
 
       const payload = await fetchRouteGeoJsonBatch(routeRequests);
       const routes = (payload.routes || [])
+        .map(routeGeoJsonFromBatchItem)
+        .filter(Boolean)
         .flatMap((geoJson, index) =>
           splitRouteAlternatives(geoJson, {
             idPrefix: `ruta-real-${index + 1}`,
@@ -708,6 +753,7 @@ export default function MapaOperativo() {
     if (route.id === bestRouteId) return "Mejor ruta";
     if (route.strengths?.includes("tiempo")) return "Menor tiempo";
     if (route.strengths?.includes("costo")) return "Menor costo";
+    if (route.strengths?.includes("fragilidad")) return "Menor fragilidad";
     if (route.strengths?.includes("distancia")) return "Menor distancia";
     return "Alternativa";
   }
@@ -811,6 +857,7 @@ export default function MapaOperativo() {
                     <option value="distancia">Menor distancia</option>
                     <option value="tiempo">Menor tiempo estimado</option>
                     <option value="costo">Menor costo estimado</option>
+                    <option value="fragilidad">Menor fragilidad de ruta</option>
                   </select>
                 </label>
 
@@ -928,6 +975,14 @@ export default function MapaOperativo() {
                   <span>Costo operativo estimado</span>
                   <strong>{formatMoney(selectedRoute?.cost)}</strong>
                 </div>
+                <div className="selected">
+                  <span>PenalizaciÃ³n de fragilidad</span>
+                  <strong>{formatDecimal(selectedRoute?.routeFragilityPenalty)}</strong>
+                </div>
+                <div className="selected">
+                  <span>Peso operativo de arista</span>
+                  <strong>{formatDecimal(selectedRoute?.edgeOperationalWeight)}</strong>
+                </div>
               </div>
             ) : (
               <div className="route-result-empty">
@@ -977,7 +1032,7 @@ export default function MapaOperativo() {
                   </div>
                   <small>{route.via}</small>
                   <em>
-                    {formatKm(route.distanceKm)} · {formatTime(route.timeMin)} · {formatMoney(route.cost)}
+                    {formatKm(route.distanceKm)} / {formatTime(route.timeMin)} / {formatMoney(route.cost)} / Frag. {formatDecimal(route.routeFragilityPenalty)}
                   </em>
                 </button>
               ))}

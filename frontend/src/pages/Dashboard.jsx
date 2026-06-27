@@ -131,10 +131,14 @@ function districtRankScore(district, maxConnections) {
   const connectionWeight = maxConnections
     ? (district.conexiones_afectadas || 0) / maxConnections
     : 0;
+  const demandWeight = Number(district.peso_demanda_familiar || 0);
+  const priorityScore = Number(district.prioridad_score || 0);
 
   return (
     (district.interrupciones || 0) * 0.7 +
     connectionWeight * 1000 +
+    demandWeight * 900 +
+    priorityScore * 700 +
     (priorityOrder[district.criticidad] || 0) * 150
   );
 }
@@ -298,6 +302,10 @@ export default function Dashboard() {
   );
   const totalConnections = filteredDistricts.reduce(
     (acc, item) => acc + (item.conexiones_afectadas || 0),
+    0
+  );
+  const totalEstimatedPeople = filteredDistricts.reduce(
+    (acc, item) => acc + (item.personas_afectadas_estimadas || 0),
     0
   );
   const totalTrucks = filteredDistricts.reduce(
@@ -500,11 +508,19 @@ export default function Dashboard() {
       path: buildPath("/mapa", { modo: "ruta" }),
     },
     {
+      label: "Personas afectadas estimadas",
+      value: formatCompact(totalEstimatedPeople),
+      helper: `${formatNumber(totalEstimatedPeople)} personas estimadas`,
+      description: "EstimaciÃ³n con conexiones afectadas y promedio de integrantes por hogar.",
+      tone: "teal",
+      path: "/agrupacion",
+    },
+    {
       label: "Conexiones afectadas",
       value: formatCompact(totalConnections),
       helper: `${formatNumber(totalConnections)} registros acumulados`,
       description: "Conexiones registradas dentro de las zonas afectadas.",
-      tone: "teal",
+      tone: "blue",
       path: "/agrupacion",
     },
     {

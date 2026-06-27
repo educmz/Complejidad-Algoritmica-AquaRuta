@@ -148,6 +148,18 @@ export default function TerritorySidePanel({
             <strong>{formatKm(node.nearestOriginDistanceKm)}</strong>
           </div>
           <div>
+            <span>Personas afectadas estimadas</span>
+            <strong>{formatCompact(node.personas_afectadas_estimadas)}</strong>
+          </div>
+          <div>
+            <span>Prom. integrantes por hogar</span>
+            <strong>{Number(node.promedio_integrantes_hogar || 0).toFixed(2)}</strong>
+          </div>
+          <div>
+            <span>Peso demanda familiar</span>
+            <strong>{Number(node.peso_demanda_familiar || 0).toFixed(3)}</strong>
+          </div>
+          <div>
             <span>Estado de la zona</span>
             <strong>{nodeStatus}</strong>
           </div>
@@ -263,8 +275,16 @@ export default function TerritorySidePanel({
           <strong>{formatNumber(block.interrupciones)}</strong>
         </div>
         <div>
-          <span>Unidades afectadas</span>
+          <span>Personas afectadas estimadas</span>
           <strong>{formatCompact(block.estimatedPopulation)}</strong>
+        </div>
+        <div>
+          <span>Peso demanda familiar</span>
+          <strong>{Number(block.demandWeight || 0).toFixed(3)}</strong>
+        </div>
+        <div>
+          <span>Prom. integrantes por hogar</span>
+          <strong>{Number(block.avgHouseholdSize || 0).toFixed(2)}</strong>
         </div>
         <div>
           <span>Tiempo máximo</span>

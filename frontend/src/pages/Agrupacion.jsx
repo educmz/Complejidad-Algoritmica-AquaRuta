@@ -419,9 +419,23 @@ export default function Agrupacion() {
           0
         );
         const estimatedPopulation = groupDistrictsWithUfds.reduce(
-          (acc, district) => acc + (district.unidades_afectadas || 0),
+          (acc, district) => acc + (district.personas_afectadas_estimadas || 0),
           0
         );
+        const demandWeight = Math.max(
+          0,
+          ...groupDistrictsWithUfds.map((district) => Number(district.peso_demanda_familiar || 0))
+        );
+        const priorityScore =
+          groupDistrictsWithUfds.reduce(
+            (acc, district) => acc + Number(district.prioridad_score || 0),
+            0
+          ) / Math.max(1, groupDistrictsWithUfds.length);
+        const avgHouseholdSize =
+          groupDistrictsWithUfds.reduce(
+            (acc, district) => acc + Number(district.promedio_integrantes_hogar || 0),
+            0
+          ) / Math.max(1, groupDistrictsWithUfds.length);
         const maxDurationHours = Math.max(
           0,
           ...groupDistrictsWithUfds.map((district) => district.duracion_maxima_horas || 0)
@@ -459,6 +473,9 @@ export default function Agrupacion() {
           scopeLabel: scopeLabel(departments, provinces),
           connections,
           estimatedPopulation,
+          demandWeight,
+          priorityScore,
+          avgHouseholdSize,
           maxDurationHours,
           avgDurationHours,
           mainDistrict,
@@ -599,6 +616,7 @@ export default function Agrupacion() {
     return [...result].sort((a, b) => {
       if (sortBy === "interrupciones") return b.interrupciones - a.interrupciones;
       if (sortBy === "poblacion") return b.estimatedPopulation - a.estimatedPopulation;
+      if (sortBy === "demanda") return b.demandWeight - a.demandWeight;
       if (sortBy === "zonas") return b.cantidad_zonas - a.cantidad_zonas;
       if (sortBy === "nodos") return b.validNodes.length - a.validNodes.length;
       if (sortBy === "distancia") return a.nearestOriginDistanceKm - b.nearestOriginDistanceKm;

@@ -154,7 +154,7 @@ export default function OperationalBlockFilters({
         </label>
 
         <label className="control-group">
-          <span className="control-label">Unidades afectadas</span>
+          <span className="control-label">Personas estimadas</span>
           <select
             className="control-select"
             value={filters.poblacion}

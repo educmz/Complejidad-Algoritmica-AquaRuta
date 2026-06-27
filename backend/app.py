@@ -8,11 +8,18 @@ import json
 import logging
 import os
 import requests
+import sys
 import threading
 import time
 from dotenv import load_dotenv
 
 load_dotenv()
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = Path(__file__).resolve().parent / "src"
+sys.path.insert(0, str(SRC))
+
+from services.ors_service import ORSService, RouteConfig
 
 app = FastAPI()
 
@@ -31,20 +38,22 @@ app.add_middleware(
 )
 
 ORS_API_KEY = os.getenv("ORS_API_KEY")
-ORS_ROUTE_URL = "https://api.openrouteservice.org/v2/directions/driving-car/geojson"
+ORS_ROUTE_URL = os.getenv("ORS_BASE_URL", "https://api.openrouteservice.org/v2/directions/driving-car/geojson")
 ROUTE_COOLDOWN_SECONDS = float(os.getenv("ROUTE_COOLDOWN_SECONDS", "3"))
 ROUTE_TIMEOUT_SECONDS = float(os.getenv("ROUTE_TIMEOUT_SECONDS", "12"))
 ORS_MAX_ALTERNATIVE_ROUTES = 3
-ROOT = Path(__file__).resolve().parents[1]
 PROCESSED_DIR = ROOT / "data" / "processed"
 logger = logging.getLogger("aquaruta.routes")
 route_lock = threading.Lock()
 last_route_request_at = 0.0
+ors_service = ORSService(RouteConfig.from_env(ROOT))
 
 
 class RouteRequest(BaseModel):
     coordinates: List[List[float]]  # [[lon, lat], [lon, lat], ...]
     alternative_routes: Dict[str, Any] | None = None
+    source: str | None = None
+    target: str | None = None
 
 
 class RouteBatchRequest(BaseModel):
@@ -140,10 +149,40 @@ def _build_route_body(payload: RouteRequest):
     alternative_routes = _sanitize_alternative_routes(payload.alternative_routes)
     if alternative_routes:
         body["alternative_routes"] = alternative_routes
+    if payload.source:
+        body["source"] = payload.source
+    if payload.target:
+        body["target"] = payload.target
     return body
 
 
+def _validate_coordinates(coordinates):
+    if not isinstance(coordinates, list) or len(coordinates) < 2:
+        raise HTTPException(status_code=400, detail="Se requieren al menos dos coordenadas.")
+
+    cleaned = []
+    for point in coordinates:
+        if not isinstance(point, list) or len(point) != 2:
+            raise HTTPException(status_code=400, detail="Cada coordenada debe tener longitud y latitud.")
+        lon = float(point[0])
+        lat = float(point[1])
+        if not -180 <= lon <= 180 or not -90 <= lat <= 90:
+            raise HTTPException(status_code=400, detail="Coordenadas fuera de rango.")
+        cleaned.append([lon, lat])
+
+    if cleaned[0] == cleaned[-1]:
+        raise HTTPException(status_code=400, detail="Origen y destino no pueden ser iguales.")
+    return cleaned
+
+
 def _request_openrouteservice(body):
+    return ors_service.route(
+        _validate_coordinates(body.get("coordinates", [])),
+        alternative_routes=body.get("alternative_routes"),
+        source=body.get("source"),
+        target=body.get("target"),
+    )
+
     headers = {
         "Authorization": ORS_API_KEY,
         "Content-Type": "application/json",
@@ -208,6 +247,18 @@ def _request_openrouteservice(body):
 @app.post("/routes-batch")
 def get_routes_batch(payload: RouteBatchRequest):
     global last_route_request_at
+
+    if not payload.routes:
+        raise HTTPException(status_code=400, detail="Se requiere al menos una ruta.")
+    if len(payload.routes) > 8:
+        raise HTTPException(status_code=400, detail="Solo se permiten hasta 8 rutas por lote.")
+
+    routes = []
+    for route in payload.routes:
+        body = _build_route_body(route)
+        body["coordinates"] = _validate_coordinates(body["coordinates"])
+        routes.append(body)
+    return ors_service.batch(routes)
 
     if not ORS_API_KEY:
         logger.error("ORS_API_KEY no configurada")
@@ -331,6 +382,10 @@ def get_route(payload: RouteRequest):
 @app.post("/route")
 def get_route_safe(payload: RouteRequest):
     global last_route_request_at
+
+    body = _build_route_body(payload)
+    body["coordinates"] = _validate_coordinates(body["coordinates"])
+    return _request_openrouteservice(body)
 
     if not ORS_API_KEY:
         logger.error("ORS_API_KEY no configurada")

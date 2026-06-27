@@ -1,0 +1,1749 @@
+{
+  "total_hogares_registros": 2122,
+  "total_poblacion_registros": 1040009,
+  "coincidencias_exactas": 325,
+  "coincidencias_por_ubigeo": 0,
+  "coincidencias_departamento_distrito": 14,
+  "coincidencias_distrito_unico": 0,
+  "coincidencias_alias": 0,
+  "sin_coincidencia": 0,
+  "ubigeos_duplicados": [],
+  "registros_invalidos": [
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    },
+    {
+      "ubigeo": "",
+      "departamento": "",
+      "provincia": "",
+      "distrito": "",
+      "motivo": "ubigeo_invalido_o_hogares_no_validos"
+    }
+  ]
+}

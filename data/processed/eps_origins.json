@@ -1,6 +1,6 @@
 [
   {
-    "id": "eps-emapa-hcva-s.-a.",
+    "id": "eps-emapa-hcva-s-a",
     "prestador": "EMAPA HCVA S. A.",
     "departamento": "Huancavelica",
     "provincia": "Huancavelica",
@@ -11,7 +11,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emapa-huaral-s.-a.",
+    "id": "eps-emapa-huaral-s-a",
     "prestador": "EMAPA HUARAL S. A.",
     "departamento": "Lima",
     "provincia": "Huaral",
@@ -22,7 +22,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emapa-pasco-s.-a.",
+    "id": "eps-emapa-pasco-s-a",
     "prestador": "EMAPA PASCO S. A.",
     "departamento": "Pasco",
     "provincia": "Pasco",
@@ -33,7 +33,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emapa-san-marton-s.-a.",
+    "id": "eps-emapa-san-marton-s-a",
     "prestador": "EMAPA SAN MARTÖN S. A.",
     "departamento": "San Martin",
     "provincia": "San Martin",
@@ -44,7 +44,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emapa-y-s.-r.-l.",
+    "id": "eps-emapa-y-s-r-l",
     "prestador": "EMAPA-Y S. R. L.",
     "departamento": "Puno",
     "provincia": "Yunguyo",
@@ -55,7 +55,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emapacop-s.-a.",
+    "id": "eps-emapacop-s-a",
     "prestador": "EMAPACOP S. A.",
     "departamento": "Ucayali",
     "provincia": "Coronel Portillo",
@@ -66,7 +66,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emapisco-s.-a.",
+    "id": "eps-emapisco-s-a",
     "prestador": "EMAPISCO S. A.",
     "departamento": "Ica",
     "provincia": "Pisco",
@@ -77,7 +77,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emsapa-calca-s.-a.",
+    "id": "eps-emsapa-calca-s-a",
     "prestador": "EMSAPA CALCA S. A.",
     "departamento": "Cusco",
     "provincia": "Calca",
@@ -88,7 +88,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emsapa-yauli-la-oroya-s.-r.-l.",
+    "id": "eps-emsapa-yauli-la-oroya-s-r-l",
     "prestador": "EMSAPA YAULI LA OROYA S. R. L.",
     "departamento": "Junin",
     "provincia": "Yauli",
@@ -99,7 +99,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emsapuno-s.-a.",
+    "id": "eps-emsapuno-s-a",
     "prestador": "EMSAPUNO S. A.",
     "departamento": "Puno",
     "provincia": "Puno",
@@ -110,7 +110,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-emssapal-s.-a.",
+    "id": "eps-emssapal-s-a",
     "prestador": "EMSSAPAL S. A.",
     "departamento": "Cusco",
     "provincia": "Canchis",
@@ -121,7 +121,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-aguas-de-lima-norte-s.-a.",
+    "id": "eps-eps-aguas-de-lima-norte-s-a",
     "prestador": "EPS AGUAS DE LIMA NORTE S. A.",
     "departamento": "Lima",
     "provincia": "Huaura",
@@ -132,7 +132,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-aguas-del-altiplano-s.-r.-l.",
+    "id": "eps-eps-aguas-del-altiplano-s-r-l",
     "prestador": "EPS AGUAS DEL ALTIPLANO S. R. L.",
     "departamento": "Puno",
     "provincia": "Melgar",
@@ -143,7 +143,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-barranca-s.-a.",
+    "id": "eps-eps-barranca-s-a",
     "prestador": "EPS BARRANCA S. A.",
     "departamento": "Lima",
     "provincia": "Barranca",
@@ -154,7 +154,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-chavon-s.-a.",
+    "id": "eps-eps-chavon-s-a",
     "prestador": "EPS CHAVÖN S. A.",
     "departamento": "Ancash",
     "provincia": "Huaraz",
@@ -165,7 +165,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-emapab-s.-a.",
+    "id": "eps-eps-emapab-s-a",
     "prestador": "EPS EMAPAB S. A.",
     "departamento": "Amazonas",
     "provincia": "Bagua",
@@ -176,7 +176,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-emapat-s.-a.",
+    "id": "eps-eps-emapat-s-a",
     "prestador": "EPS EMAPAT S. A.",
     "departamento": "Madre De Dios",
     "provincia": "Tambopata",
@@ -187,7 +187,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-emapica-s.-a.",
+    "id": "eps-eps-emapica-s-a",
     "prestador": "EPS EMAPICA S. A.",
     "departamento": "Ica",
     "provincia": "Ica",
@@ -198,7 +198,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-emsap-chanka-s.-a.",
+    "id": "eps-eps-emsap-chanka-s-a",
     "prestador": "EPS EMSAP CHANKA S. A.",
     "departamento": "Apurimac",
     "provincia": "Andahuaylas",
@@ -209,7 +209,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-emusap-abancay-s.-a.",
+    "id": "eps-eps-emusap-abancay-s-a",
     "prestador": "EPS EMUSAP ABANCAY S. A.",
     "departamento": "Apurimac",
     "provincia": "Abancay",
@@ -220,7 +220,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-grau-s.-a.",
+    "id": "eps-eps-grau-s-a",
     "prestador": "EPS GRAU S. A.",
     "departamento": "Piura",
     "provincia": "Piura",
@@ -231,7 +231,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-ilo-s.-a.",
+    "id": "eps-eps-ilo-s-a",
     "prestador": "EPS ILO S. A.",
     "departamento": "Moquegua",
     "provincia": "Ilo",
@@ -242,7 +242,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-mantaro-s.-a.",
+    "id": "eps-eps-mantaro-s-a",
     "prestador": "EPS MANTARO S. A.",
     "departamento": "Junin",
     "provincia": "Jauja",
@@ -253,7 +253,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-maraan-s.-a.",
+    "id": "eps-eps-mara-an-s-a",
     "prestador": "EPS MARA¥àN S. A.",
     "departamento": "Cajamarca",
     "provincia": "Jaen",
@@ -264,7 +264,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-moquegua-s.-a.",
+    "id": "eps-eps-moquegua-s-a",
     "prestador": "EPS MOQUEGUA S. A.",
     "departamento": "Moquegua",
     "provincia": "Mariscal Nieto",
@@ -275,7 +275,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-moyobamba-s.-a.",
+    "id": "eps-eps-moyobamba-s-a",
     "prestador": "EPS MOYOBAMBA S. A.",
     "departamento": "San Martin",
     "provincia": "Moyobamba",
@@ -286,7 +286,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-nor-puno-s.-a.",
+    "id": "eps-eps-nor-puno-s-a",
     "prestador": "EPS NOR PUNO S. A.",
     "departamento": "Puno",
     "provincia": "Azangaro",
@@ -297,7 +297,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-rioja-s.-a.",
+    "id": "eps-eps-rioja-s-a",
     "prestador": "EPS RIOJA S. A.",
     "departamento": "San Martin",
     "provincia": "Rioja",
@@ -308,7 +308,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-sedacaj-s.-a.",
+    "id": "eps-eps-sedacaj-s-a",
     "prestador": "EPS SEDACAJ S. A.",
     "departamento": "Cajamarca",
     "provincia": "Cajamarca",
@@ -319,7 +319,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-sedacusco-s.-a.",
+    "id": "eps-eps-sedacusco-s-a",
     "prestador": "EPS SEDACUSCO S. A.",
     "departamento": "Cusco",
     "provincia": "Cusco",
@@ -330,7 +330,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-sedaloreto-s.-a.",
+    "id": "eps-eps-sedaloreto-s-a",
     "prestador": "EPS SEDALORETO S. A.",
     "departamento": "Loreto",
     "provincia": "Maynas",
@@ -341,7 +341,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-selva-central-s.-a.",
+    "id": "eps-eps-selva-central-s-a",
     "prestador": "EPS SELVA CENTRAL S. A.",
     "departamento": "Junin",
     "provincia": "Chanchamayo",
@@ -352,7 +352,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-sierra-central-s.-r.-l.",
+    "id": "eps-eps-sierra-central-s-r-l",
     "prestador": "EPS SIERRA CENTRAL S. R. L.",
     "departamento": "Junin",
     "provincia": "Tarma",
@@ -363,7 +363,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-eps-tacna-s.-a.",
+    "id": "eps-eps-tacna-s-a",
     "prestador": "EPS TACNA S. A.",
     "departamento": "Tacna",
     "provincia": "Tacna",
@@ -374,7 +374,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-epsel-s.-a.",
+    "id": "eps-epsel-s-a",
     "prestador": "EPSEL S. A.",
     "departamento": "Lambayeque",
     "provincia": "Chiclayo",
@@ -385,7 +385,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-epssmu-s.-a.",
+    "id": "eps-epssmu-s-a",
     "prestador": "EPSSMU S. A.",
     "departamento": "Amazonas",
     "provincia": "Utcubamba",
@@ -396,7 +396,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-seda-ayacucho-s.-a.",
+    "id": "eps-seda-ayacucho-s-a",
     "prestador": "SEDA AYACUCHO S. A.",
     "departamento": "Ayacucho",
     "provincia": "Huamanga",
@@ -407,7 +407,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-seda-hunuco-s.-a.",
+    "id": "eps-seda-hu-nuco-s-a",
     "prestador": "SEDA HUµNUCO S. A.",
     "departamento": "Huanuco",
     "provincia": "Huanuco",
@@ -418,7 +418,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-sedachimbote-s.-a.",
+    "id": "eps-sedachimbote-s-a",
     "prestador": "SEDACHIMBOTE S. A.",
     "departamento": "Ancash",
     "provincia": "Santa",
@@ -429,7 +429,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-sedalib-s.-a.",
+    "id": "eps-sedalib-s-a",
     "prestador": "SEDALIB S. A.",
     "departamento": "La Libertad",
     "provincia": "Trujillo",
@@ -440,7 +440,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-sedam-huancayo-s.-a.",
+    "id": "eps-sedam-huancayo-s-a",
     "prestador": "SEDAM HUANCAYO S. A.",
     "departamento": "Junin",
     "provincia": "Huancayo",
@@ -451,7 +451,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-sedapal-s.-a.",
+    "id": "eps-sedapal-s-a",
     "prestador": "SEDAPAL S. A.",
     "departamento": "Lima",
     "provincia": "Lima",
@@ -462,7 +462,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-sedapar-s.-a.",
+    "id": "eps-sedapar-s-a",
     "prestador": "SEDAPAR S. A.",
     "departamento": "Arequipa",
     "provincia": "Arequipa",
@@ -473,7 +473,7 @@
     "descripcion": "Origen operativo referencial asociado al prestador"
   },
   {
-    "id": "eps-semapach-s.-a.",
+    "id": "eps-semapach-s-a",
     "prestador": "SEMAPACH S. A.",
     "departamento": "Ica",
     "provincia": "Chincha",

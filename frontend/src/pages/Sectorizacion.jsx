@@ -391,9 +391,18 @@ export default function Sectorizacion() {
         .map((id) => districtMap.get(id))
         .filter((district) => district && validCenter(district.center));
       const estimatedPopulation = districtsInSector.reduce(
-        (acc, district) => acc + Number(district.unidades_afectadas || 0),
+        (acc, district) => acc + Number(district.personas_afectadas_estimadas || 0),
         0
       );
+      const demandWeight = Math.max(
+        0,
+        ...districtsInSector.map((district) => Number(district.peso_demanda_familiar || 0))
+      );
+      const avgHouseholdSize =
+        districtsInSector.reduce(
+          (acc, district) => acc + Number(district.promedio_integrantes_hogar || 0),
+          0
+        ) / Math.max(1, districtsInSector.length);
       const connections = districtsInSector.reduce(
         (acc, district) => acc + Number(district.conexiones_afectadas || 0),
         0
@@ -408,6 +417,8 @@ export default function Sectorizacion() {
         nodos: districtsInSector,
         cantidad_nodos: districtsInSector.length,
         estimatedPopulation,
+        demandWeight,
+        avgHouseholdSize,
         connections,
         nearestOrigin: nearest.origin,
         nearestOriginDistanceKm: nearest.distance,
@@ -557,6 +568,8 @@ export default function Sectorizacion() {
                     <th>Sector</th>
                     <th>Zonas</th>
                     <th>Interrupciones</th>
+                    <th>Personas estimadas</th>
+                    <th>Peso demanda</th>
                     <th>Criticidad</th>
                     <th>Prioridad</th>
                     <th>Participación de carga</th>
@@ -577,6 +590,8 @@ export default function Sectorizacion() {
                       </td>
                       <td>{formatNumber(sector.cantidad_zonas)}</td>
                       <td>{formatNumber(sector.interrupciones)}</td>
+                      <td>{formatNumber(sector.estimatedPopulation)}</td>
+                      <td>{Number(sector.demandWeight || 0).toFixed(3)}</td>
                       <td><span className={badgeClass(sector.criticidad)}>{sector.criticidad}</span></td>
                       <td>{sector.priorityLabel}</td>
                       <td>{sector.loadPct.toFixed(1)}%</td>
@@ -637,6 +652,18 @@ export default function Sectorizacion() {
                   <div>
                     <span>Interrupciones</span>
                     <strong>{formatNumber(activeSector.interrupciones)}</strong>
+                  </div>
+                  <div>
+                    <span>Personas afectadas estimadas</span>
+                    <strong>{formatNumber(activeSector.estimatedPopulation)}</strong>
+                  </div>
+                  <div>
+                    <span>Peso demanda familiar</span>
+                    <strong>{Number(activeSector.demandWeight || 0).toFixed(3)}</strong>
+                  </div>
+                  <div>
+                    <span>Prom. integrantes por hogar</span>
+                    <strong>{Number(activeSector.avgHouseholdSize || 0).toFixed(2)}</strong>
                   </div>
                   <div>
                     <span>Participación de carga</span>

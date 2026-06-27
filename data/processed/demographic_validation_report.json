@@ -1,0 +1,13 @@
+{
+  "distritos_procesados": 339,
+  "distritos_con_datos_inei": 285,
+  "distritos_con_fallback": 54,
+  "distritos_sin_ubigeo": 0,
+  "promedio_hogar_min": 1.81,
+  "promedio_hogar_max": 5.66,
+  "promedio_hogar_promedio": 3.55,
+  "personas_estimadas_min": 0,
+  "personas_estimadas_max": 24840307,
+  "peso_demanda_min": 0.0,
+  "peso_demanda_max": 1.0
+}

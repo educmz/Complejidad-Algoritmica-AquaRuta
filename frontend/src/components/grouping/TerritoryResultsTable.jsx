@@ -29,8 +29,9 @@ function sortOptions() {
     ["criticidad", "Criticidad"],
     ["prioridad", "Orden operativo"],
     ["interrupciones", "Interrupciones"],
+    ["demanda", "Peso demanda familiar"],
     ["zonas", "Zonas"],
-    ["poblacion", "Unidades afectadas"],
+    ["poblacion", "Personas estimadas"],
     ["distancia", "Distancia EPS"],
   ];
 }
@@ -114,7 +115,8 @@ export default function TerritoryResultsTable({
               <th>Cobertura EPS</th>
               <th>EPS de referencia</th>
               <th>Interrupciones</th>
-              <th>Unidades afectadas</th>
+              <th>Personas estimadas</th>
+              <th>Peso demanda</th>
               <th></th>
             </tr>
           </thead>
@@ -149,6 +151,7 @@ export default function TerritoryResultsTable({
                 </td>
                 <td>{formatNumber(block.interrupciones)}</td>
                 <td>{formatCompact(block.estimatedPopulation)}</td>
+                <td>{Number(block.demandWeight || 0).toFixed(3)}</td>
                 <td>
                   <div className="territory-row-actions compact">
                     <button type="button" onClick={() => onOpenGroup(block)}>
