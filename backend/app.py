@@ -21,6 +21,7 @@ sys.path.insert(0, str(SRC))
 
 from services.grouping_service import GroupingConfigError, GroupingService
 from services.dijkstra_service import DijkstraService, DijkstraServiceError
+from services.graph_traversal_service import GraphTraversalService, GraphTraversalServiceError
 from services.ors_service import ORSService, RouteConfig
 from services.tsp_service import TspService, TspServiceError, normalize_criterion
 
@@ -53,6 +54,7 @@ ors_service = ORSService(RouteConfig.from_env(ROOT))
 grouping_service = GroupingService(ROOT)
 dijkstra_service = DijkstraService(ROOT)
 tsp_service = TspService(ROOT)
+graph_traversal_service = GraphTraversalService(ROOT)
 
 
 class RouteRequest(BaseModel):
@@ -148,6 +150,31 @@ class DijkstraRunRequest(BaseModel):
     @field_validator("nodeIds")
     @classmethod
     def validate_node_ids(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError("La lista de nodos contiene ids duplicados.")
+        return value
+
+
+class GraphTraversalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    originId: str = Field(min_length=1)
+    nodeIds: List[str] = Field(..., min_length=1, max_length=120)
+    algorithm: str = Field("bfs")
+    maxNodes: int = Field(100, ge=1, le=120)
+    maxNeighbors: int = Field(4, ge=1, le=20)
+
+    @field_validator("algorithm")
+    @classmethod
+    def validate_traversal_algorithm(cls, value):
+        normalized = str(value or "").strip().lower()
+        if normalized not in {"bfs", "dfs"}:
+            raise ValueError("Algoritmo de recorrido no permitido.")
+        return normalized
+
+    @field_validator("nodeIds")
+    @classmethod
+    def validate_traversal_node_ids(cls, value):
         if len(value) != len(set(value)):
             raise ValueError("La lista de nodos contiene ids duplicados.")
         return value
@@ -446,6 +473,26 @@ def run_local_dijkstra(payload: DijkstraRunRequest):
         raise HTTPException(
             status_code=500,
             detail="No se pudo calcular el camino minimo.",
+        ) from exc
+
+
+@app.post("/local-exploration/traversal")
+def run_local_traversal(payload: GraphTraversalRequest):
+    try:
+        return graph_traversal_service.run(
+            origin_id=payload.originId,
+            node_ids=payload.nodeIds,
+            algorithm=payload.algorithm,
+            max_nodes=payload.maxNodes,
+            max_neighbors=payload.maxNeighbors,
+        )
+    except GraphTraversalServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar recorrido local: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo calcular el recorrido.",
         ) from exc
 
 

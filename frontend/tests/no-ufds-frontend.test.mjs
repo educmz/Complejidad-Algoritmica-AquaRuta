@@ -54,4 +54,9 @@ for (const [file, content] of contents) {
     false,
     `No debe existir una implementacion Dijkstra o escalado de pesos en React en ${file}`
   );
+  assert.equal(
+    /function\s+bfs\s*\(|function\s+dfs\s*\(|breadthFirst|depthFirst|queue\.shift\s*\(|stack\.pop\s*\(\)/.test(content),
+    false,
+    `No debe existir una implementacion BFS/DFS activa en React en ${file}`
+  );
 }

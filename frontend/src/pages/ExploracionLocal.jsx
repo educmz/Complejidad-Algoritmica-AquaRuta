@@ -6,6 +6,7 @@ import { aquaRutaData } from "../data/aquaRutaData";
 import { runDijkstraExploration } from "../services/dijkstraApi";
 import { fetchRouteGeoJson } from "../services/mapApi";
 import { runTspExploration } from "../services/tspApi";
+import { runGraphTraversal } from "../services/traversalApi";
 import { epsCoverageStatus, epsRequiresValidation } from "../utils/epsCoverage";
 
 const CRITERIA = {
@@ -183,6 +184,12 @@ export default function ExploracionLocal() {
   const [dijkstraError, setDijkstraError] = useState("");
   const [dijkstraPayload, setDijkstraPayload] = useState(null);
   const [dijkstraRetryToken, setDijkstraRetryToken] = useState(0);
+  const [traversalAlgorithm, setTraversalAlgorithm] = useState("bfs");
+  const [selectedTraversalOriginId, setSelectedTraversalOriginId] = useState("");
+  const [traversalStatus, setTraversalStatus] = useState("idle");
+  const [traversalError, setTraversalError] = useState("");
+  const [traversalPayload, setTraversalPayload] = useState(null);
+  const [traversalRetryToken, setTraversalRetryToken] = useState(0);
 
   const selectedGroup =
     groupOptions.find((group) => group.groupId === selectedGroupId) || groupOptions[0] || null;
@@ -258,6 +265,10 @@ export default function ExploracionLocal() {
     activeSectorNodes.find((node) => node.id === selectedTargetId) ||
     activeSectorNodes[activeSectorNodes.length - 1] ||
     null;
+  const selectedTraversalOrigin =
+    activeSectorNodes.find((node) => node.id === selectedTraversalOriginId) ||
+    activeSectorNodes[0] ||
+    null;
   const tspRequest = useMemo(
     () => ({
       originId: selectedOrigin?.id || "",
@@ -322,23 +333,57 @@ export default function ExploracionLocal() {
     })),
     [criterion, dijkstraPayload]
   );
+  const traversalOrderMap = useMemo(
+    () =>
+      new Map((traversalPayload?.order || []).map((item) => [item.nodeId, item.position])),
+    [traversalPayload]
+  );
+  const traversalUnreachableIds = useMemo(
+    () => new Set((traversalPayload?.unreachableNodes || []).map((node) => node.id)),
+    [traversalPayload]
+  );
+  const traversalEdges = useMemo(
+    () => (traversalPayload?.treeEdges || []).map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+      weight: edge.order,
+      weightLabel: `#${edge.order}`,
+      isTraversalEdge: true,
+    })),
+    [traversalPayload]
+  );
   const visibleEdges =
     mapView === "network"
       ? [...sectorBaseEdges, ...sequenceEdges]
       : mapView === "dijkstra"
       ? dijkstraEdges
+      : mapView === "traversal"
+      ? traversalEdges
       : [];
   const highlightedPathEdges =
-    mapView === "network" ? sequenceEdges : mapView === "dijkstra" ? dijkstraEdges : [];
-  const districtPoints = mapView === "network" || mapView === "dijkstra"
+    mapView === "network"
+      ? sequenceEdges
+      : mapView === "dijkstra"
+      ? dijkstraEdges
+      : mapView === "traversal"
+      ? traversalEdges
+      : [];
+  const districtPoints = mapView === "network" || mapView === "dijkstra" || mapView === "traversal"
     ? [
         ...(originNode ? [originNode] : []),
         ...sectorDistricts.map((node) => ({
           ...node,
           isActiveNode: !disabledNodeIds.has(node.id),
-          isExcluded: disabledNodeIds.has(node.id),
-          isGoal: node.id === selectedTarget?.id,
-          mapOrder: orderMap.get(node.id) || null,
+          isExcluded:
+            disabledNodeIds.has(node.id) ||
+            (mapView === "traversal" && traversalUnreachableIds.has(node.id)),
+          isGoal:
+            mapView === "dijkstra"
+              ? node.id === selectedTarget?.id
+              : mapView === "traversal"
+              ? node.id === selectedTraversalOrigin?.id
+              : false,
+          mapOrder: mapView === "traversal" ? traversalOrderMap.get(node.id) || null : orderMap.get(node.id) || null,
         })),
       ]
     : [];
@@ -347,7 +392,14 @@ export default function ExploracionLocal() {
   const excludedNodeCount = sectorDistricts.length - activeNodeCount;
   const localEdgeCount = sectorBaseEdges.length;
   const criterionInfo = CRITERIA[criterion];
-  const viewMode = mapView === "road" ? "Ruta vial" : mapView === "dijkstra" ? "Camino minimo" : "Red local";
+  const viewMode =
+    mapView === "road"
+      ? "Ruta vial"
+      : mapView === "dijkstra"
+      ? "Camino minimo"
+      : mapView === "traversal"
+      ? "Recorrido logico"
+      : "Red local";
   const roadRouteCoordinates = useMemo(
     () =>
       routePoints.length > 1
@@ -367,6 +419,16 @@ export default function ExploracionLocal() {
     }),
     [activeSectorNodes, criterion, selectedOrigin?.id, selectedTarget?.id]
   );
+  const traversalRequest = useMemo(
+    () => ({
+      originId: selectedTraversalOrigin?.id || "",
+      nodeIds: activeSectorNodes.map((node) => node.id),
+      algorithm: traversalAlgorithm,
+      maxNodes: 100,
+      maxNeighbors: 4,
+    }),
+    [activeSectorNodes, selectedTraversalOrigin?.id, traversalAlgorithm]
+  );
 
   useEffect(() => {
     if (selectedTargetId && activeSectorNodes.some((node) => node.id === selectedTargetId)) {
@@ -377,6 +439,19 @@ export default function ExploracionLocal() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [activeSectorNodes, selectedTargetId]);
+
+  useEffect(() => {
+    if (
+      selectedTraversalOriginId &&
+      activeSectorNodes.some((node) => node.id === selectedTraversalOriginId)
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSelectedTraversalOriginId(activeSectorNodes[0]?.id || "");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSectorNodes, selectedTraversalOriginId]);
 
   useEffect(() => {
     if (!tspRequest.originId) {
@@ -466,6 +541,50 @@ export default function ExploracionLocal() {
   }, [dijkstraRequest, dijkstraRetryToken, mapView]);
 
   useEffect(() => {
+    if (mapView !== "traversal") return undefined;
+    if (!traversalRequest.originId) {
+      const timer = window.setTimeout(() => {
+        setTraversalStatus("idle");
+        setTraversalPayload(null);
+        setTraversalError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    if (!traversalRequest.nodeIds.length) {
+      const timer = window.setTimeout(() => {
+        setTraversalStatus("empty");
+        setTraversalPayload(null);
+        setTraversalError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => {
+      setTraversalStatus("loading");
+      setTraversalError("");
+    }, 0);
+
+    runGraphTraversal(traversalRequest, { signal: controller.signal })
+      .then((payload) => {
+        setTraversalPayload(payload);
+        setTraversalStatus(payload.unreachableNodes?.length ? "partial" : "success");
+        setTraversalError("");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setTraversalPayload(null);
+        setTraversalStatus("error");
+        setTraversalError(error?.message || "No se pudo calcular el recorrido.");
+      });
+
+    return () => {
+      window.clearTimeout(loadingTimer);
+      controller.abort();
+    };
+  }, [mapView, traversalRequest, traversalRetryToken]);
+
+  useEffect(() => {
     let cancelled = false;
     if (mapView !== "road" || !roadRouteCoordinates) return undefined;
     if (roadRouteKey === currentRoadRouteKey && (roadRouteGeoJson || roadRouteError)) {
@@ -517,6 +636,10 @@ export default function ExploracionLocal() {
 
   function retryDijkstra() {
     setDijkstraRetryToken((current) => current + 1);
+  }
+
+  function retryTraversal() {
+    setTraversalRetryToken((current) => current + 1);
   }
 
   return (
@@ -619,6 +742,33 @@ export default function ExploracionLocal() {
                 </select>
               </label>
 
+              <label className="control-group">
+                <span className="control-label">Origen del recorrido logico</span>
+                <select
+                  className="control-select"
+                  value={selectedTraversalOrigin?.id || ""}
+                  onChange={(event) => setSelectedTraversalOriginId(event.target.value)}
+                >
+                  {activeSectorNodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="control-group">
+                <span className="control-label">Recorrido logico</span>
+                <select
+                  className="control-select"
+                  value={traversalAlgorithm}
+                  onChange={(event) => setTraversalAlgorithm(event.target.value)}
+                >
+                  <option value="bfs">BFS por niveles</option>
+                  <option value="dfs">DFS en profundidad</option>
+                </select>
+              </label>
+
               <div className="local-metric-card">
                 <span>Recorrido estimado</span>
                 <strong>{routePoints.length > 1 ? formatWeight(tspResult.totalDistance, criterion) : "Sin secuencia"}</strong>
@@ -687,6 +837,37 @@ export default function ExploracionLocal() {
                 </div>
               )}
 
+              {mapView === "traversal" && traversalStatus === "idle" && (
+                <div className="local-route-status">
+                  Selecciona un origen y un recorrido.
+                </div>
+              )}
+
+              {mapView === "traversal" && traversalStatus === "loading" && (
+                <div className="local-route-status">
+                  Calculando recorrido...
+                </div>
+              )}
+
+              {mapView === "traversal" && traversalStatus === "empty" && (
+                <div className="local-route-status">
+                  No hay nodos disponibles en el sector seleccionado.
+                </div>
+              )}
+
+              {mapView === "traversal" && traversalStatus === "partial" && (
+                <div className="local-route-status warning">
+                  Algunos distritos no son alcanzables desde el origen.
+                </div>
+              )}
+
+              {mapView === "traversal" && traversalStatus === "error" && (
+                <div className="local-route-status error">
+                  <span>{traversalError || "No se pudo calcular el recorrido."}</span>
+                  <button type="button" onClick={retryTraversal}>Reintentar</button>
+                </div>
+              )}
+
               <label className="control-group">
                 <span className="control-label">Tipo de visualización</span>
                 <select
@@ -697,6 +878,7 @@ export default function ExploracionLocal() {
                   <option value="road">Ruta vial</option>
                   <option value="network">Red local</option>
                   <option value="dijkstra">Camino minimo</option>
+                  <option value="traversal">Recorrido logico</option>
                 </select>
               </label>
 
@@ -714,11 +896,11 @@ export default function ExploracionLocal() {
               activeCenter={selectedSectorCenter}
               routePoints={mapView === "road" ? routePoints : mapView === "dijkstra" ? dijkstraRoutePoints : []}
               routeGeoJson={mapView === "road" ? roadRouteGeoJson : null}
-              routeColor={mapView === "dijkstra" ? "#2563eb" : "#16a34a"}
+              routeColor={mapView === "dijkstra" ? "#2563eb" : mapView === "traversal" ? "#9333ea" : "#16a34a"}
               showConceptRouteFallback={mapView !== "road"}
               graphEdges={visibleEdges}
-              highlightedPathEdges={mapView === "network" ? highlightedPathEdges : []}
-              showEdgeWeights={mapView === "network"}
+              highlightedPathEdges={mapView === "network" || mapView === "traversal" ? highlightedPathEdges : []}
+              showEdgeWeights={mapView === "network" || mapView === "traversal"}
               edgeWeightLabel={criterionInfo.edgeLabel}
               showDistrictMarkers
               onDistrictClick={toggleNode}
@@ -738,6 +920,7 @@ export default function ExploracionLocal() {
               <div><i className="route" /> Secuencia TSP</div>
               {mapView === "network" && <div><i className="edge" /> Conexiones locales</div>}
               {mapView === "network" && <div><i className="weight" /> Valor por tramo</div>}
+              {mapView === "traversal" && <div><i className="edge" /> Recorrido sobre conexiones logicas</div>}
             </div>
           </div>
 
@@ -777,6 +960,14 @@ export default function ExploracionLocal() {
                       {dijkstraPayload?.summary
                         ? formatDijkstraWeight(dijkstraPayload.summary.totalWeight, criterion)
                         : "Sin camino"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Recorrido logico</span>
+                    <strong>
+                      {traversalPayload?.summary
+                        ? `${traversalPayload.summary.visitedNodes}/${traversalPayload.summary.totalNodes}`
+                        : "Sin recorrido"}
                     </strong>
                   </div>
                   <div>
@@ -835,6 +1026,10 @@ export default function ExploracionLocal() {
                     <span>Relajaciones Dijkstra</span>
                     <strong>{dijkstraPayload?.summary?.relaxedEdges || 0}</strong>
                   </div>
+                  <div>
+                    <span>Aristas de recorrido</span>
+                    <strong>{traversalPayload?.summary?.treeEdges || 0}</strong>
+                  </div>
                 </div>
               </section>
             </div>
@@ -885,6 +1080,18 @@ export default function ExploracionLocal() {
               </div>
             )}
 
+            {traversalPayload?.metadata && (
+              <div className="local-explanation-card">
+                <strong>Recorrido sobre conexiones logicas</strong>
+                <p>
+                  {traversalPayload.unreachableNodes?.length
+                    ? `Se visitaron ${traversalPayload.summary.visitedNodes} de ${traversalPayload.summary.totalNodes} zona(s).`
+                    : `Se visitaron ${traversalPayload.summary.visitedNodes} zona(s) desde ${traversalPayload.origin.name}.`}
+                </p>
+                <span>{traversalPayload.algorithm.toUpperCase()}</span>
+              </div>
+            )}
+
             <p className="territory-context-note">
               La secuencia es una propuesta de apoyo. En sectores grandes puede priorizar zonas
               representativas para mantener el cálculo manejable.
@@ -899,6 +1106,22 @@ export default function ExploracionLocal() {
                 </button>
               ))}
             </div>
+
+            {traversalPayload?.order?.length > 0 && (
+              <div className="local-route-list">
+                <span>Orden de recorrido {traversalPayload.algorithm.toUpperCase()}</span>
+                {traversalPayload.order.map((item) => (
+                  <button key={item.nodeId} type="button">
+                    <strong>{item.position}. {item.name}</strong>
+                    <small>
+                      {traversalPayload.algorithm === "bfs"
+                        ? `Nivel ${item.level ?? 0}`
+                        : `Profundidad ${item.depth ?? 0}`}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            )}
           </article>
         </section>
       </section>
