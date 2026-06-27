@@ -3,9 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
 import AquaMap from "../components/map/AquaMap";
 import { aquaRutaData } from "../data/aquaRutaData";
+import { runDijkstraExploration } from "../services/dijkstraApi";
 import { fetchRouteGeoJson } from "../services/mapApi";
+import { runTspExploration } from "../services/tspApi";
 import { epsCoverageStatus, epsRequiresValidation } from "../utils/epsCoverage";
-import { solveTspMemoization } from "../utils/tspMemoization";
 
 const CRITERIA = {
   distancia: {
@@ -42,6 +43,13 @@ function formatWeight(value, criterion) {
   if (criterion === "tiempo") return `${formatNumber(value * 60, 1)} min`;
   if (criterion === "costo") return `S/ ${formatNumber(value * 120, 2)}`;
   return `${formatNumber(value * 111.32, 1)} km aprox.`;
+}
+
+function formatDijkstraWeight(value, criterion) {
+  if (!Number.isFinite(value)) return "No disponible";
+  if (criterion === "tiempo") return `${formatNumber(value, 1)} min`;
+  if (criterion === "costo") return `S/ ${formatNumber(value, 2)}`;
+  return `${formatNumber(value, 1)} km`;
 }
 
 function edgeWeight(edge, criterion) {
@@ -112,20 +120,6 @@ function buildSectorEdges(nodes, criterion, neighbors = 3) {
   return [...edgeMap.values()];
 }
 
-function routeEdgesFromOrder(originNode, order) {
-  const sequence = [originNode, ...order].filter(Boolean);
-  const edges = [];
-  for (let index = 0; index < sequence.length - 1; index += 1) {
-    edges.push({
-      source: sequence[index].id,
-      target: sequence[index + 1].id,
-      weight: normalizedDistance(sequence[index].center, sequence[index + 1].center),
-      isSequence: true,
-    });
-  }
-  return edges;
-}
-
 function routeCoordinateKey(coordinates) {
   return (coordinates || [])
     .map(([lon, lat]) => `${Number(lon).toFixed(5)},${Number(lat).toFixed(5)}`)
@@ -180,6 +174,15 @@ export default function ExploracionLocal() {
   const [roadRouteKey, setRoadRouteKey] = useState("");
   const [roadRouteLoading, setRoadRouteLoading] = useState(false);
   const [roadRouteError, setRoadRouteError] = useState("");
+  const [tspStatus, setTspStatus] = useState("idle");
+  const [tspError, setTspError] = useState("");
+  const [tspPayload, setTspPayload] = useState(null);
+  const [tspRetryToken, setTspRetryToken] = useState(0);
+  const [selectedTargetId, setSelectedTargetId] = useState("");
+  const [dijkstraStatus, setDijkstraStatus] = useState("idle");
+  const [dijkstraError, setDijkstraError] = useState("");
+  const [dijkstraPayload, setDijkstraPayload] = useState(null);
+  const [dijkstraRetryToken, setDijkstraRetryToken] = useState(0);
 
   const selectedGroup =
     groupOptions.find((group) => group.groupId === selectedGroupId) || groupOptions[0] || null;
@@ -237,7 +240,7 @@ export default function ExploracionLocal() {
     () =>
       selectedOrigin
         ? {
-            id: `${selectedOrigin.id}-local-origin`,
+            id: selectedOrigin.id,
             nombre: selectedOrigin.prestador,
             center: [selectedOrigin.lat, selectedOrigin.lon],
             interrupciones: 0,
@@ -251,39 +254,90 @@ export default function ExploracionLocal() {
     () => sectorDistricts.filter((district) => !disabledNodeIds.has(district.id)),
     [disabledNodeIds, sectorDistricts]
   );
-  const tspResult = useMemo(
-    () =>
-      solveTspMemoization({
-        originCenter: originNode?.center,
-        destinations: activeSectorNodes,
-        criterion,
-        maxExactNodes: 12,
-      }),
-    [activeSectorNodes, criterion, originNode?.center]
+  const selectedTarget =
+    activeSectorNodes.find((node) => node.id === selectedTargetId) ||
+    activeSectorNodes[activeSectorNodes.length - 1] ||
+    null;
+  const tspRequest = useMemo(
+    () => ({
+      originId: selectedOrigin?.id || "",
+      destinationIds: activeSectorNodes.map((node) => node.id),
+      criterion,
+      maxExactNodes: 12,
+      maxDestinations: 60,
+    }),
+    [activeSectorNodes, criterion, selectedOrigin?.id]
   );
-  const sequenceNodes = useMemo(() => tspResult.bestOrder || [], [tspResult.bestOrder]);
+  const tspResult = useMemo(
+    () => ({
+      bestOrder: tspPayload?.sequence || [],
+      totalDistance: tspPayload?.summary?.totalCost || 0,
+      exploredStates: tspPayload?.summary?.exploredStates || 0,
+      cacheHits: tspPayload?.summary?.cacheHits || 0,
+      usedFallback: Boolean(tspPayload?.summary?.usedFallback),
+      routePoints: tspPayload?.routePoints || (originNode?.center ? [originNode.center] : []),
+    }),
+    [originNode, tspPayload]
+  );
+  const sequenceNodes = useMemo(
+    () =>
+      (tspPayload?.sequence || [])
+        .map((item) => {
+          const district = districtMap.get(item.nodeId);
+          if (!district) return null;
+          return {
+            ...district,
+            mapOrder: item.order,
+            transitionCost: item.transitionCost,
+            accumulatedCost: item.accumulatedCost,
+          };
+        })
+        .filter(Boolean),
+    [districtMap, tspPayload]
+  );
   const routePoints = useMemo(() => tspResult.routePoints || [], [tspResult.routePoints]);
+  const dijkstraRoutePoints = useMemo(
+    () => dijkstraPayload?.routePoints || (originNode?.center ? [originNode.center] : []),
+    [dijkstraPayload, originNode]
+  );
   const orderMap = new Map(sequenceNodes.map((node, index) => [node.id, index + 1]));
   const sectorBaseEdges = useMemo(
     () => buildSectorEdges(sectorDistricts, criterion),
     [criterion, sectorDistricts]
   );
   const sequenceEdges = useMemo(
-    () => routeEdgesFromOrder(originNode, sequenceNodes).map((edge) => ({
+    () => (tspPayload?.edges || []).map((edge) => ({
       ...edge,
-      weightLabel: formatWeight(edgeWeight(edge, criterion), criterion),
+      weightLabel: formatWeight(Number(edge.weight || 0), criterion),
     })),
-    [criterion, originNode, sequenceNodes]
+    [criterion, tspPayload]
   );
-  const visibleEdges = mapView === "network" ? [...sectorBaseEdges, ...sequenceEdges] : [];
-  const highlightedPathEdges = mapView === "network" ? sequenceEdges : [];
-  const districtPoints = mapView === "network"
+  const dijkstraEdges = useMemo(
+    () => (dijkstraPayload?.edges || []).map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+      weight: edge.selectedWeight,
+      weightLabel: formatDijkstraWeight(Number(edge.selectedWeight || 0), criterion),
+      isShortestPath: true,
+    })),
+    [criterion, dijkstraPayload]
+  );
+  const visibleEdges =
+    mapView === "network"
+      ? [...sectorBaseEdges, ...sequenceEdges]
+      : mapView === "dijkstra"
+      ? dijkstraEdges
+      : [];
+  const highlightedPathEdges =
+    mapView === "network" ? sequenceEdges : mapView === "dijkstra" ? dijkstraEdges : [];
+  const districtPoints = mapView === "network" || mapView === "dijkstra"
     ? [
         ...(originNode ? [originNode] : []),
         ...sectorDistricts.map((node) => ({
           ...node,
           isActiveNode: !disabledNodeIds.has(node.id),
           isExcluded: disabledNodeIds.has(node.id),
+          isGoal: node.id === selectedTarget?.id,
           mapOrder: orderMap.get(node.id) || null,
         })),
       ]
@@ -293,7 +347,7 @@ export default function ExploracionLocal() {
   const excludedNodeCount = sectorDistricts.length - activeNodeCount;
   const localEdgeCount = sectorBaseEdges.length;
   const criterionInfo = CRITERIA[criterion];
-  const viewMode = mapView === "road" ? "Ruta vial" : "Red local";
+  const viewMode = mapView === "road" ? "Ruta vial" : mapView === "dijkstra" ? "Camino minimo" : "Red local";
   const roadRouteCoordinates = useMemo(
     () =>
       routePoints.length > 1
@@ -302,6 +356,114 @@ export default function ExploracionLocal() {
     [routePoints]
   );
   const currentRoadRouteKey = routeCoordinateKey(roadRouteCoordinates);
+  const dijkstraRequest = useMemo(
+    () => ({
+      originId: selectedOrigin?.id || "",
+      targetId: selectedTarget?.id || "",
+      nodeIds: activeSectorNodes.map((node) => node.id),
+      criterion,
+      maxNodes: 80,
+      maxNeighbors: 4,
+    }),
+    [activeSectorNodes, criterion, selectedOrigin?.id, selectedTarget?.id]
+  );
+
+  useEffect(() => {
+    if (selectedTargetId && activeSectorNodes.some((node) => node.id === selectedTargetId)) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSelectedTargetId(activeSectorNodes[activeSectorNodes.length - 1]?.id || "");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSectorNodes, selectedTargetId]);
+
+  useEffect(() => {
+    if (!tspRequest.originId) {
+      const timer = window.setTimeout(() => {
+        setTspStatus("idle");
+        setTspPayload(null);
+        setTspError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    if (!tspRequest.destinationIds.length) {
+      const timer = window.setTimeout(() => {
+        setTspStatus("empty");
+        setTspPayload(null);
+        setTspError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => {
+      setTspStatus("loading");
+      setTspError("");
+    }, 0);
+
+    runTspExploration(tspRequest, { signal: controller.signal })
+      .then((payload) => {
+        setTspPayload(payload);
+        setTspStatus(payload.sequence.length ? "success" : "empty");
+        setTspError("");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setTspPayload(null);
+        setTspStatus("error");
+        setTspError(error?.message || "No se pudo calcular la secuencia de visita.");
+      });
+
+    return () => {
+      window.clearTimeout(loadingTimer);
+      controller.abort();
+    };
+  }, [tspRequest, tspRetryToken]);
+
+  useEffect(() => {
+    if (mapView !== "dijkstra") return undefined;
+    if (!dijkstraRequest.originId || !dijkstraRequest.targetId) {
+      const timer = window.setTimeout(() => {
+        setDijkstraStatus("idle");
+        setDijkstraPayload(null);
+        setDijkstraError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    if (!dijkstraRequest.nodeIds.length) {
+      const timer = window.setTimeout(() => {
+        setDijkstraStatus("empty");
+        setDijkstraPayload(null);
+        setDijkstraError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => {
+      setDijkstraStatus("loading");
+      setDijkstraError("");
+    }, 0);
+
+    runDijkstraExploration(dijkstraRequest, { signal: controller.signal })
+      .then((payload) => {
+        setDijkstraPayload(payload);
+        setDijkstraStatus(payload.status === "unreachable" ? "unreachable" : "success");
+        setDijkstraError("");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setDijkstraPayload(null);
+        setDijkstraStatus("error");
+        setDijkstraError(error?.message || "No se pudo calcular el camino minimo.");
+      });
+
+    return () => {
+      window.clearTimeout(loadingTimer);
+      controller.abort();
+    };
+  }, [dijkstraRequest, dijkstraRetryToken, mapView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -347,6 +509,14 @@ export default function ExploracionLocal() {
       else next.add(node.id);
       return next;
     });
+  }
+
+  function retryTsp() {
+    setTspRetryToken((current) => current + 1);
+  }
+
+  function retryDijkstra() {
+    setDijkstraRetryToken((current) => current + 1);
   }
 
   return (
@@ -434,11 +604,88 @@ export default function ExploracionLocal() {
                 </select>
               </label>
 
+              <label className="control-group">
+                <span className="control-label">Destino para camino minimo</span>
+                <select
+                  className="control-select"
+                  value={selectedTarget?.id || ""}
+                  onChange={(event) => setSelectedTargetId(event.target.value)}
+                >
+                  {activeSectorNodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div className="local-metric-card">
                 <span>Recorrido estimado</span>
                 <strong>{routePoints.length > 1 ? formatWeight(tspResult.totalDistance, criterion) : "Sin secuencia"}</strong>
                 <small>Calculado con {activeNodeCount} zonas incluidas del sector.</small>
               </div>
+
+              {tspStatus === "idle" && (
+                <div className="local-route-status">
+                  Selecciona un sector y un punto de origen.
+                </div>
+              )}
+
+              {tspStatus === "loading" && (
+                <div className="local-route-status">
+                  Calculando secuencia de visita...
+                </div>
+              )}
+
+              {tspStatus === "empty" && (
+                <div className="local-route-status">
+                  No hay destinos disponibles en el sector seleccionado.
+                </div>
+              )}
+
+              {tspStatus === "error" && (
+                <div className="local-route-status error">
+                  <span>{tspError || "No se pudo calcular la secuencia de visita."}</span>
+                  <button type="button" onClick={retryTsp}>Reintentar</button>
+                </div>
+              )}
+
+              {tspResult.usedFallback && (
+                <div className="local-route-status warning">
+                  Se muestra una ruta aproximada para mantener un tiempo de respuesta adecuado.
+                </div>
+              )}
+
+              {mapView === "dijkstra" && dijkstraStatus === "idle" && (
+                <div className="local-route-status">
+                  Selecciona un origen, un destino y un criterio.
+                </div>
+              )}
+
+              {mapView === "dijkstra" && dijkstraStatus === "loading" && (
+                <div className="local-route-status">
+                  Calculando el camino minimo...
+                </div>
+              )}
+
+              {mapView === "dijkstra" && dijkstraStatus === "empty" && (
+                <div className="local-route-status">
+                  No hay destinos disponibles en el sector seleccionado.
+                </div>
+              )}
+
+              {mapView === "dijkstra" && dijkstraStatus === "unreachable" && (
+                <div className="local-route-status warning">
+                  No existe una conexion disponible entre los nodos seleccionados.
+                </div>
+              )}
+
+              {mapView === "dijkstra" && dijkstraStatus === "error" && (
+                <div className="local-route-status error">
+                  <span>{dijkstraError || "No se pudo calcular el camino minimo."}</span>
+                  <button type="button" onClick={retryDijkstra}>Reintentar</button>
+                </div>
+              )}
 
               <label className="control-group">
                 <span className="control-label">Tipo de visualización</span>
@@ -449,6 +696,7 @@ export default function ExploracionLocal() {
                 >
                   <option value="road">Ruta vial</option>
                   <option value="network">Red local</option>
+                  <option value="dijkstra">Camino minimo</option>
                 </select>
               </label>
 
@@ -464,9 +712,9 @@ export default function ExploracionLocal() {
               origins={selectedOrigin ? [selectedOrigin] : []}
               districtPoints={districtPoints}
               activeCenter={selectedSectorCenter}
-              routePoints={mapView === "road" ? routePoints : []}
+              routePoints={mapView === "road" ? routePoints : mapView === "dijkstra" ? dijkstraRoutePoints : []}
               routeGeoJson={mapView === "road" ? roadRouteGeoJson : null}
-              routeColor="#16a34a"
+              routeColor={mapView === "dijkstra" ? "#2563eb" : "#16a34a"}
               showConceptRouteFallback={mapView !== "road"}
               graphEdges={visibleEdges}
               highlightedPathEdges={mapView === "network" ? highlightedPathEdges : []}
@@ -524,6 +772,14 @@ export default function ExploracionLocal() {
                     <strong>{routePoints.length > 1 ? formatWeight(tspResult.totalDistance, criterion) : "Sin secuencia"}</strong>
                   </div>
                   <div>
+                    <span>Camino minimo</span>
+                    <strong>
+                      {dijkstraPayload?.summary
+                        ? formatDijkstraWeight(dijkstraPayload.summary.totalWeight, criterion)
+                        : "Sin camino"}
+                    </strong>
+                  </div>
+                  <div>
                     <span>EPS de referencia</span>
                     <strong>{selectedOrigin?.prestador || "No disponible"}</strong>
                   </div>
@@ -568,8 +824,16 @@ export default function ExploracionLocal() {
                     <strong>{tspResult.exploredStates}</strong>
                   </div>
                   <div>
+                    <span>Estados en cache</span>
+                    <strong>{tspResult.cacheHits}</strong>
+                  </div>
+                  <div>
                     <span>Conexiones evaluadas</span>
                     <strong>{localEdgeCount}</strong>
+                  </div>
+                  <div>
+                    <span>Relajaciones Dijkstra</span>
+                    <strong>{dijkstraPayload?.summary?.relaxedEdges || 0}</strong>
                   </div>
                 </div>
               </section>
@@ -608,6 +872,18 @@ export default function ExploracionLocal() {
                   : "Selecciona al menos una zona para calcular la secuencia local."}
               </p>
             </div>
+
+            {dijkstraPayload?.metadata && (
+              <div className="local-explanation-card">
+                <strong>Conexion logica optimizada</strong>
+                <p>
+                  {dijkstraPayload.status === "success"
+                    ? `Camino de ${dijkstraPayload.path.length} nodo(s), calculado por ${criterionInfo.label}.`
+                    : "No existe una conexion entre el origen y el destino dentro del grafo logico seleccionado."}
+                </p>
+                <span>{dijkstraPayload.metadata.weightField}</span>
+              </div>
+            )}
 
             <p className="territory-context-note">
               La secuencia es una propuesta de apoyo. En sectores grandes puede priorizar zonas

@@ -39,4 +39,19 @@ for (const [file, content] of contents) {
     false,
     `No debe recalcularse agrupacion UFDS en JavaScript en ${file}`
   );
+  assert.equal(
+    content.includes("tspMemoization"),
+    false,
+    `No debe importarse ni consumirse tspMemoization en ${file}`
+  );
+  assert.equal(
+    /solveTspMemoization|function\s+dp\s*\(|bitmask|mask\s*&|1\s*<<\s*n/.test(content),
+    false,
+    `No debe existir una implementacion TSP-DP activa en ${file}`
+  );
+  assert.equal(
+    /scaleRoute|distance\s*\*\s*1\.25|distance\s*\*\s*1\.4|newDistance\s*=\s*currentDistance/.test(content),
+    false,
+    `No debe existir una implementacion Dijkstra o escalado de pesos en React en ${file}`
+  );
 }

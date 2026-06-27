@@ -20,7 +20,9 @@ SRC = Path(__file__).resolve().parent / "src"
 sys.path.insert(0, str(SRC))
 
 from services.grouping_service import GroupingConfigError, GroupingService
+from services.dijkstra_service import DijkstraService, DijkstraServiceError
 from services.ors_service import ORSService, RouteConfig
+from services.tsp_service import TspService, TspServiceError, normalize_criterion
 
 app = FastAPI()
 
@@ -49,6 +51,8 @@ route_lock = threading.Lock()
 last_route_request_at = 0.0
 ors_service = ORSService(RouteConfig.from_env(ROOT))
 grouping_service = GroupingService(ROOT)
+dijkstra_service = DijkstraService(ROOT)
+tsp_service = TspService(ROOT)
 
 
 class RouteRequest(BaseModel):
@@ -98,6 +102,55 @@ class GroupingRunRequest(BaseModel):
 
     filters: GroupingFilters
     config: GroupingConfig
+
+
+class TspRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    originId: str = Field(min_length=1)
+    destinationIds: List[str] = Field(default_factory=list, max_length=100)
+    criterion: str = Field("distancia")
+    maxExactNodes: int = Field(12, ge=1, le=12)
+    maxDestinations: int = Field(60, ge=1, le=100)
+
+    @field_validator("criterion")
+    @classmethod
+    def validate_tsp_criterion(cls, value):
+        return normalize_criterion(value)
+
+    @field_validator("destinationIds")
+    @classmethod
+    def validate_destination_ids(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError("La lista de destinos contiene ids duplicados.")
+        return value
+
+
+class DijkstraRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    originId: str = Field(min_length=1)
+    targetId: str = Field(min_length=1)
+    nodeIds: List[str] = Field(default_factory=list, max_length=120)
+    criterion: str = Field("distancia")
+    maxNodes: int = Field(80, ge=1, le=120)
+    maxNeighbors: int = Field(4, ge=1, le=20)
+
+    @field_validator("criterion")
+    @classmethod
+    def validate_dijkstra_criterion(cls, value):
+        normalized = str(value or "").strip().lower()
+        normalized = {"distance": "distancia", "time": "tiempo", "cost": "costo"}.get(normalized, normalized)
+        if normalized not in {"distancia", "tiempo", "costo"}:
+            raise ValueError("Criterio Dijkstra no permitido.")
+        return normalized
+
+    @field_validator("nodeIds")
+    @classmethod
+    def validate_node_ids(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError("La lista de nodos contiene ids duplicados.")
+        return value
 
 
 def _load_json(filename: str, fallback):
@@ -352,6 +405,47 @@ def run_grouping(payload: GroupingRunRequest):
         raise HTTPException(
             status_code=500,
             detail="No se pudo calcular la agrupacion operativa.",
+        ) from exc
+
+
+@app.post("/local-exploration/tsp")
+def run_local_tsp(payload: TspRunRequest):
+    try:
+        return tsp_service.run(
+            origin_id=payload.originId,
+            destination_ids=payload.destinationIds,
+            criterion=payload.criterion,
+            max_exact_nodes=payload.maxExactNodes,
+            max_destinations=payload.maxDestinations,
+        )
+    except TspServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar TSP local: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo calcular la secuencia de visita.",
+        ) from exc
+
+
+@app.post("/local-exploration/dijkstra")
+def run_local_dijkstra(payload: DijkstraRunRequest):
+    try:
+        return dijkstra_service.run(
+            origin_id=payload.originId,
+            target_id=payload.targetId,
+            node_ids=payload.nodeIds,
+            criterion=payload.criterion,
+            max_nodes=payload.maxNodes,
+            max_neighbors=payload.maxNeighbors,
+        )
+    except DijkstraServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar Dijkstra local: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo calcular el camino minimo.",
         ) from exc
 
 
