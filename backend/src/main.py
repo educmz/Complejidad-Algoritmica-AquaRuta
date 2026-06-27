@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import json
+import logging
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "backend" / "src"
@@ -42,6 +43,8 @@ PROCESSED_DEMOGRAPHIC_VALIDATION_REPORT_PATH = ROOT / "data/processed/demographi
 
 EXPORT_JS_PATH = ROOT / "frontend/src/data/aquaRutaData.js"
 
+logger = logging.getLogger(__name__)
+
 
 def export_to_frontend(
     districts_summary,
@@ -73,71 +76,73 @@ def export_to_frontend(
 
 
 def main():
-    print("Cargando dataset de interrupciones...")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    logger.info("Cargando dataset de interrupciones...")
     interruptions_df = InterruptionsLoader(str(RAW_INTERRUPTION_CSV_PATH)).load()
-    print(f"Registros cargados: {len(interruptions_df)}")
+    logger.info("Registros cargados: %s", len(interruptions_df))
 
-    print("Cargando centros distritales...")
+    logger.info("Cargando centros distritales...")
     centers_df = DistrictCentersLoader(str(RAW_CENTERS_CSV_PATH)).load()
-    print(f"Centros cargados: {len(centers_df)}")
+    logger.info("Centros cargados: %s", len(centers_df))
 
-    print("Cargando fuentes demograficas...")
+    logger.info("Cargando fuentes demograficas...")
     demographics = DemographicsLoader(
         str(RAW_HOUSEHOLDS_CSV_PATH),
         str(RAW_POPULATION_CSV_PATH),
         centers_df,
     ).load()
 
-    print("Cargando dataset de EPS...")
+    logger.info("Cargando dataset de EPS...")
     eps_df = EpsLoader(str(RAW_EPS_CSV_PATH)).load()
-    print(f"EPS cargadas: {len(eps_df)}")
+    logger.info("EPS cargadas: %s", len(eps_df))
 
-    print("Construyendo resumen por distrito...")
+    logger.info("Construyendo resumen por distrito...")
     districts_summary, match_report, validation_report = build_districts_summary(
         interruptions_df,
         demographics=demographics,
     )
-    print(f"Distritos resumidos: {len(districts_summary)}")
+    logger.info("Distritos resumidos: %s", len(districts_summary))
 
     dataset_metadata = build_dataset_metadata(interruptions_df)
 
-    print("Asignando centers...")
+    logger.info("Asignando centers...")
     districts_summary = enrich_districts_with_centers(districts_summary, centers_df)
 
-    print("Limpiando campos internos...")
+    logger.info("Limpiando campos internos...")
     districts_summary_clean = strip_internal_fields(districts_summary)
 
-    print("Guardando resumen distrital y reportes demograficos...")
+    logger.info("Guardando resumen distrital y reportes demograficos...")
     save_json(districts_summary_clean, str(PROCESSED_SUMMARY_PATH))
     validation_report["distritos_sin_ubigeo"] = sum(1 for item in districts_summary_clean if not item.get("ubigeo"))
     save_json(match_report, str(PROCESSED_DEMOGRAPHIC_MATCH_REPORT_PATH))
     save_json(validation_report, str(PROCESSED_DEMOGRAPHIC_VALIDATION_REPORT_PATH))
 
-    print("Construyendo agrupaciones UFDS...")
+    logger.info("Construyendo agrupaciones UFDS...")
     grouped_zones = build_grouped_zones(districts_summary_clean)
     save_grouped_zones(grouped_zones, str(PROCESSED_GROUPS_PATH))
 
-    print("Construyendo sectorizacion...")
+    logger.info("Construyendo sectorizacion...")
     sectorized_zones = build_sectorized_zones(districts_summary_clean, grouped_zones)
     save_sectorized_zones(sectorized_zones, str(PROCESSED_SECTORS_PATH))
 
-    print("Construyendo nodos EPS...")
+    logger.info("Construyendo nodos EPS...")
     eps_origins = build_eps_origins(eps_df, centers_df)
     save_json(eps_origins, str(PROCESSED_EPS_ORIGINS_PATH))
 
-    print("Construyendo exploracion de rutas con Dijkstra...")
+    logger.info("Construyendo exploracion de rutas con Dijkstra...")
     route_explorations = build_route_explorations(districts_summary_clean, sectorized_zones, eps_origins)
     save_route_explorations(route_explorations, str(PROCESSED_ROUTE_EXPLORATIONS_PATH))
 
-    print("Construyendo recorridos operativos...")
+    logger.info("Construyendo recorridos operativos...")
     operational_routes = build_operational_routes(districts_summary_clean, grouped_zones, eps_origins, top_groups=7)
     save_json(operational_routes, str(PROCESSED_OPERATIONAL_ROUTES_PATH))
 
-    print("Construyendo exploracion local...")
+    logger.info("Construyendo exploracion local...")
     local_graphs = build_local_graphs(districts_summary_clean, sectorized_zones, eps_origins)
     save_json(local_graphs, str(PROCESSED_LOCAL_GRAPHS_PATH))
 
-    print("Exportando al frontend...")
+    logger.info("Exportando al frontend...")
     export_to_frontend(
         districts_summary_clean,
         grouped_zones,
@@ -150,9 +155,9 @@ def main():
         str(EXPORT_JS_PATH),
     )
 
-    print("Proceso completado.")
-    print(f"Resumen: {PROCESSED_SUMMARY_PATH}")
-    print(f"Reporte demografico: {PROCESSED_DEMOGRAPHIC_VALIDATION_REPORT_PATH}")
+    logger.info("Proceso completado.")
+    logger.info("Resumen: %s", PROCESSED_SUMMARY_PATH)
+    logger.info("Reporte demografico: %s", PROCESSED_DEMOGRAPHIC_VALIDATION_REPORT_PATH)
 
 
 if __name__ == "__main__":

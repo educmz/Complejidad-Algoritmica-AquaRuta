@@ -9,15 +9,17 @@ from pathlib import Path
 from typing import Any
 
 from algorithms.divide_conquer import sectorize_divide_and_conquer
+from config.algorithm_limits import (
+    MAX_SECTOR_SIZE_ALLOWED,
+    MAX_SECTORIZATION_DEPTH,
+    MAX_SECTORIZATION_NODES,
+)
 
 
 logger = logging.getLogger("aquaruta.sectorization")
 
 MIN_SECTOR_SIZE = 1
-MAX_SECTOR_SIZE_ALLOWED = 50
 DEFAULT_MAX_SECTOR_SIZE = 8
-MAX_SECTORIZATION_NODES = 500
-MAX_SECTORIZATION_DEPTH = 12
 ALLOWED_SPLIT_CRITERIA = {"geografico", "carga", "mixto", "prioridad", "geographic_spread"}
 
 

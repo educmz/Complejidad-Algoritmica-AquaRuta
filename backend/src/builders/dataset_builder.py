@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime
 import json
+import logging
 from statistics import mean
 from typing import Any
 
@@ -10,6 +11,8 @@ import pandas as pd
 
 from loaders.demographics_loader import PROMEDIO_NACIONAL_HOGAR
 from utils.text_utils import normalize_text, slug_text
+
+logger = logging.getLogger(__name__)
 
 
 def clamp(value, low=0.0, high=1.0) -> float:
@@ -302,7 +305,7 @@ def enrich_districts_with_centers(districts_summary: list[dict], centers_df: pd.
             district["center"] = center["center"]
             district["ubigeo"] = district.get("ubigeo") or center["ubigeo"]
             matched_count += 1
-    print(f"Distritos con center asignado: {matched_count}/{len(districts_summary)}")
+    logger.info("Distritos con center asignado: %s/%s", matched_count, len(districts_summary))
     return districts_summary
 
 

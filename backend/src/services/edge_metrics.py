@@ -3,11 +3,12 @@ from __future__ import annotations
 from math import asin, cos, isfinite, radians, sin, sqrt
 from typing import Any
 
-
-ROAD_FACTOR = 1.35
-AVERAGE_SPEED_KMH = 28.0
-DISTANCE_COST_FACTOR = 4.6
-TIME_COST_FACTOR = 0.85
+from config.operational_constants import (
+    AVERAGE_SPEED_KMH,
+    DISTANCE_COST_FACTOR,
+    ROAD_DISTANCE_FACTOR,
+    TIME_COST_FACTOR,
+)
 
 
 def node_value(node: dict[str, Any], key: str, default: Any = 0) -> Any:
@@ -76,7 +77,7 @@ def build_edge_metrics(source: dict[str, Any], target: dict[str, Any]) -> dict[s
     if not source_center or not target_center:
         raise ValueError("No se pueden calcular metricas sin coordenadas validas.")
     distance_km = haversine_km(source_center, target_center)
-    road_distance_km = distance_km * ROAD_FACTOR
+    road_distance_km = distance_km * ROAD_DISTANCE_FACTOR
     traffic = traffic_factor(source, target)
     duration_min = (road_distance_km / AVERAGE_SPEED_KMH) * 60 * traffic
     operational_cost = road_distance_km * DISTANCE_COST_FACTOR + duration_min * TIME_COST_FACTOR

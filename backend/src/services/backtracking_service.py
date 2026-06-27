@@ -9,13 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from algorithms.backtracking import solve_backtracking
+from config.algorithm_limits import MAX_BACKTRACKING_NODES, MAX_BACKTRACKING_VISITS
 from services.edge_metrics import build_edge_metrics, center_from_node, normalize_criterion
 
 
 logger = logging.getLogger("aquaruta.backtracking")
 
-MAX_BACKTRACKING_NODES = 10
-MAX_VISITS = 10
 MAX_DISTANCE = 2000.0
 MAX_DURATION = 5000.0
 MAX_OPERATIONAL_COST = 50000.0
@@ -143,8 +142,8 @@ class BacktrackingService:
         if max_visits is None:
             max_visits = min(destination_count, 4)
         max_visits = int(max_visits)
-        if max_visits < 1 or max_visits > MAX_VISITS:
-            raise BacktrackingServiceError(f"maxVisits debe estar entre 1 y {MAX_VISITS}.")
+        if max_visits < 1 or max_visits > MAX_BACKTRACKING_VISITS:
+            raise BacktrackingServiceError(f"maxVisits debe estar entre 1 y {MAX_BACKTRACKING_VISITS}.")
         return {
             "max_distance_km": _finite_optional(
                 constraints.get("maxDistanceKm", constraints.get("max_distance_km")),
