@@ -1,16 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from pathlib import Path
-from typing import Any, Dict, List
 from datetime import datetime
 import json
 import logging
-import os
-import requests
 import sys
-import threading
-import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,7 +13,27 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = Path(__file__).resolve().parent / "src"
 sys.path.insert(0, str(SRC))
 
+from api.models import (
+    BacktrackingRunRequest,
+    DijkstraRunRequest,
+    GraphTraversalRequest,
+    GroupingRunRequest,
+    RouteBatchRequest,
+    RouteRequest,
+    SectorizationRunRequest,
+    TspRunRequest,
+)
+from config.operational_constants import ORS_MAX_ALTERNATIVE_ROUTES
+from services.grouping_service import GroupingConfigError, GroupingService
+from services.backtracking_service import (
+    BacktrackingService,
+    BacktrackingServiceError,
+)
+from services.dijkstra_service import DijkstraService, DijkstraServiceError
+from services.graph_traversal_service import GraphTraversalService, GraphTraversalServiceError
 from services.ors_service import ORSService, RouteConfig
+from services.sectorization_service import SectorizationService, SectorizationServiceError
+from services.tsp_service import TspService, TspServiceError
 
 app = FastAPI()
 
@@ -37,27 +51,15 @@ app.add_middleware(
     expose_headers=["Retry-After"],
 )
 
-ORS_API_KEY = os.getenv("ORS_API_KEY")
-ORS_ROUTE_URL = os.getenv("ORS_BASE_URL", "https://api.openrouteservice.org/v2/directions/driving-car/geojson")
-ROUTE_COOLDOWN_SECONDS = float(os.getenv("ROUTE_COOLDOWN_SECONDS", "3"))
-ROUTE_TIMEOUT_SECONDS = float(os.getenv("ROUTE_TIMEOUT_SECONDS", "12"))
-ORS_MAX_ALTERNATIVE_ROUTES = 3
 PROCESSED_DIR = ROOT / "data" / "processed"
 logger = logging.getLogger("aquaruta.routes")
-route_lock = threading.Lock()
-last_route_request_at = 0.0
 ors_service = ORSService(RouteConfig.from_env(ROOT))
-
-
-class RouteRequest(BaseModel):
-    coordinates: List[List[float]]  # [[lon, lat], [lon, lat], ...]
-    alternative_routes: Dict[str, Any] | None = None
-    source: str | None = None
-    target: str | None = None
-
-
-class RouteBatchRequest(BaseModel):
-    routes: List[RouteRequest]
+grouping_service = GroupingService(ROOT)
+dijkstra_service = DijkstraService(ROOT)
+tsp_service = TspService(ROOT)
+graph_traversal_service = GraphTraversalService(ROOT)
+backtracking_service = BacktrackingService(ROOT)
+sectorization_service = SectorizationService(ROOT)
 
 
 def _load_json(filename: str, fallback):
@@ -183,71 +185,9 @@ def _request_openrouteservice(body):
         target=body.get("target"),
     )
 
-    headers = {
-        "Authorization": ORS_API_KEY,
-        "Content-Type": "application/json",
-    }
-
-    try:
-        response = requests.post(
-            ORS_ROUTE_URL,
-            json=body,
-            headers=headers,
-            timeout=ROUTE_TIMEOUT_SECONDS,
-        )
-    except requests.exceptions.Timeout as exc:
-        logger.warning("Timeout consultando OpenRouteService: %s", exc)
-        raise HTTPException(
-            status_code=504,
-            detail="OpenRouteService tardÃ³ demasiado en responder. Intenta nuevamente en unos segundos.",
-        ) from exc
-    except requests.exceptions.RequestException as exc:
-        logger.warning("Error de red consultando OpenRouteService: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail="No se pudo conectar con OpenRouteService. Intenta nuevamente mÃ¡s tarde.",
-        ) from exc
-
-    if response.status_code == 429:
-        retry_after = response.headers.get("Retry-After")
-        retry_message = f" Intenta nuevamente en {retry_after} s." if retry_after else ""
-        logger.warning("OpenRouteService devolviÃ³ 429. Retry-After=%s", retry_after)
-        raise HTTPException(
-            status_code=429,
-            detail=(
-                "Se alcanzÃ³ el lÃ­mite de solicitudes de OpenRouteService. "
-                f"Espera antes de volver a intentar.{retry_message}"
-            ),
-            headers={"Retry-After": retry_after} if retry_after else None,
-        )
-
-    try:
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as exc:
-        logger.warning(
-            "OpenRouteService devolviÃ³ error HTTP %s: %s",
-            response.status_code,
-            response.text[:300],
-        )
-        raise HTTPException(
-            status_code=502,
-            detail="OpenRouteService no pudo calcular la ruta solicitada. Revisa los puntos o intenta nuevamente.",
-        ) from exc
-
-    try:
-        return response.json()
-    except ValueError as exc:
-        logger.warning("Respuesta invÃ¡lida de OpenRouteService: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail="OpenRouteService devolviÃ³ una respuesta invÃ¡lida.",
-        ) from exc
-
 
 @app.post("/routes-batch")
 def get_routes_batch(payload: RouteBatchRequest):
-    global last_route_request_at
-
     if not payload.routes:
         raise HTTPException(status_code=400, detail="Se requiere al menos una ruta.")
     if len(payload.routes) > 8:
@@ -260,42 +200,128 @@ def get_routes_batch(payload: RouteBatchRequest):
         routes.append(body)
     return ors_service.batch(routes)
 
-    if not ORS_API_KEY:
-        logger.error("ORS_API_KEY no configurada")
-        raise HTTPException(
-            status_code=503,
-            detail="No se ha configurado la clave de OpenRouteService.",
-        )
-
-    if not payload.routes:
-        raise HTTPException(status_code=400, detail="Se requiere al menos una ruta.")
-    if len(payload.routes) > 2:
-        raise HTTPException(status_code=400, detail="Solo se permiten hasta 2 consultas de ruta por cálculo.")
-
-    now = time.monotonic()
-    with route_lock:
-        elapsed = now - last_route_request_at
-        if elapsed < ROUTE_COOLDOWN_SECONDS:
-            wait_seconds = max(1, int(round(ROUTE_COOLDOWN_SECONDS - elapsed)))
-            logger.info("Solicitud /routes-batch bloqueada por cooldown: esperar %s s", wait_seconds)
-            raise HTTPException(
-                status_code=429,
-                detail=f"Espera unos segundos antes de calcular otra ruta. Intenta nuevamente en {wait_seconds} s.",
-                headers={"Retry-After": str(wait_seconds)},
-            )
-        last_route_request_at = now
-
-    return {
-        "routes": [
-            _request_openrouteservice(_build_route_body(route))
-            for route in payload.routes[:2]
-        ]
-    }
-
 
 @app.get("/")
 def root():
     return {"message": "Backend AquaRuta activo"}
+
+
+@app.post("/grouping/run")
+def run_grouping(payload: GroupingRunRequest):
+    try:
+        return grouping_service.run(
+            filters=payload.filters.model_dump(),
+            config=payload.config.model_dump(),
+        )
+    except GroupingConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar agrupacion UFDS: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo calcular la agrupacion operativa.",
+        ) from exc
+
+
+@app.post("/local-exploration/tsp")
+def run_local_tsp(payload: TspRunRequest):
+    try:
+        return tsp_service.run(
+            origin_id=payload.originId,
+            destination_ids=payload.destinationIds,
+            criterion=payload.criterion,
+            max_exact_nodes=payload.maxExactNodes,
+            max_destinations=payload.maxDestinations,
+        )
+    except TspServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar TSP local: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo calcular la secuencia de visita.",
+        ) from exc
+
+
+@app.post("/local-exploration/dijkstra")
+def run_local_dijkstra(payload: DijkstraRunRequest):
+    try:
+        return dijkstra_service.run(
+            origin_id=payload.originId,
+            target_id=payload.targetId,
+            node_ids=payload.nodeIds,
+            criterion=payload.criterion,
+            max_nodes=payload.maxNodes,
+            max_neighbors=payload.maxNeighbors,
+        )
+    except DijkstraServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar Dijkstra local: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo calcular el camino minimo.",
+        ) from exc
+
+
+@app.post("/local-exploration/traversal")
+def run_local_traversal(payload: GraphTraversalRequest):
+    try:
+        return graph_traversal_service.run(
+            origin_id=payload.originId,
+            node_ids=payload.nodeIds,
+            algorithm=payload.algorithm,
+            max_nodes=payload.maxNodes,
+            max_neighbors=payload.maxNeighbors,
+        )
+    except GraphTraversalServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar recorrido local: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo calcular el recorrido.",
+        ) from exc
+
+
+@app.post("/local-exploration/backtracking")
+def run_local_backtracking(payload: BacktrackingRunRequest):
+    try:
+        return backtracking_service.run(
+            origin_id=payload.originId,
+            destination_ids=payload.destinationIds,
+            criterion=payload.criterion,
+            constraints=payload.constraints.model_dump(),
+            max_exact_nodes=payload.maxExactNodes,
+        )
+    except BacktrackingServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar Backtracking local: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo evaluar la secuencia.",
+        ) from exc
+
+
+@app.post("/sectorization/run")
+def run_sectorization(payload: SectorizationRunRequest):
+    try:
+        return sectorization_service.run(
+            group_id=payload.groupId,
+            node_ids=payload.nodeIds,
+            max_sector_size=payload.maxSectorSize,
+            split_criterion=payload.splitCriterion,
+            max_depth=payload.maxDepth,
+        )
+    except SectorizationServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar sectorizacion: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo sectorizar el grupo.",
+        ) from exc
 
 
 @app.get("/dashboard")
@@ -353,128 +379,10 @@ def get_dashboard(
     }
 
 
-# Legacy implementation kept unreachable for reference; /route uses get_route_safe below.
-def get_route(payload: RouteRequest):
-    return get_route_safe(payload)
-    url = "https://api.openrouteservice.org/v2/directions/driving-car/geojson"
-
-    headers = {
-        "Authorization": ORS_API_KEY,
-        "Content-Type": "application/json",
-    }
-
-    body = {
-        "coordinates": payload.coordinates
-    }
-
-    response = requests.post(url, json=body, headers=headers)
-
-    if response.status_code == 429:
-        raise HTTPException(
-            status_code=429,
-            detail="Se alcanzÃ³ el lÃ­mite de solicitudes de OpenRouteService. Espera unos minutos e intenta nuevamente."
-        )
-
-    response.raise_for_status()
-    return response.json()
 
 
 @app.post("/route")
 def get_route_safe(payload: RouteRequest):
-    global last_route_request_at
-
     body = _build_route_body(payload)
     body["coordinates"] = _validate_coordinates(body["coordinates"])
     return _request_openrouteservice(body)
-
-    if not ORS_API_KEY:
-        logger.error("ORS_API_KEY no configurada")
-        raise HTTPException(
-            status_code=503,
-            detail="No se ha configurado la clave de OpenRouteService.",
-        )
-
-    if len(payload.coordinates) < 2:
-        raise HTTPException(
-            status_code=400,
-            detail="Se requieren al menos dos coordenadas para calcular una ruta.",
-        )
-
-    now = time.monotonic()
-    with route_lock:
-        elapsed = now - last_route_request_at
-        if elapsed < ROUTE_COOLDOWN_SECONDS:
-            wait_seconds = max(1, int(round(ROUTE_COOLDOWN_SECONDS - elapsed)))
-            logger.info("Solicitud /route bloqueada por cooldown: esperar %s s", wait_seconds)
-            raise HTTPException(
-                status_code=429,
-                detail=f"Espera unos segundos antes de calcular otra ruta. Intenta nuevamente en {wait_seconds} s.",
-                headers={"Retry-After": str(wait_seconds)},
-            )
-        last_route_request_at = now
-
-    return _request_openrouteservice(_build_route_body(payload))
-
-    headers = {
-        "Authorization": ORS_API_KEY,
-        "Content-Type": "application/json",
-    }
-    body = {"coordinates": payload.coordinates}
-    alternative_routes = _sanitize_alternative_routes(payload.alternative_routes)
-    if alternative_routes:
-        body["alternative_routes"] = alternative_routes
-
-    try:
-        response = requests.post(
-            ORS_ROUTE_URL,
-            json=body,
-            headers=headers,
-            timeout=ROUTE_TIMEOUT_SECONDS,
-        )
-    except requests.exceptions.Timeout as exc:
-        logger.warning("Timeout consultando OpenRouteService: %s", exc)
-        raise HTTPException(
-            status_code=504,
-            detail="OpenRouteService tardÃ³ demasiado en responder. Intenta nuevamente en unos segundos.",
-        ) from exc
-    except requests.exceptions.RequestException as exc:
-        logger.warning("Error de red consultando OpenRouteService: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail="No se pudo conectar con OpenRouteService. Intenta nuevamente mÃ¡s tarde.",
-        ) from exc
-
-    if response.status_code == 429:
-        retry_after = response.headers.get("Retry-After")
-        retry_message = f" Intenta nuevamente en {retry_after} s." if retry_after else ""
-        logger.warning("OpenRouteService devolviÃ³ 429. Retry-After=%s", retry_after)
-        raise HTTPException(
-            status_code=429,
-            detail=(
-                "Se alcanzÃ³ el lÃ­mite de solicitudes de OpenRouteService. "
-                f"Espera antes de volver a intentar.{retry_message}"
-            ),
-            headers={"Retry-After": retry_after} if retry_after else None,
-        )
-
-    try:
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as exc:
-        logger.warning(
-            "OpenRouteService devolviÃ³ error HTTP %s: %s",
-            response.status_code,
-            response.text[:300],
-        )
-        raise HTTPException(
-            status_code=502,
-            detail="OpenRouteService no pudo calcular la ruta solicitada. Revisa los puntos o intenta nuevamente.",
-        ) from exc
-
-    try:
-        return response.json()
-    except ValueError as exc:
-        logger.warning("Respuesta invÃ¡lida de OpenRouteService: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail="OpenRouteService devolviÃ³ una respuesta invÃ¡lida.",
-        ) from exc

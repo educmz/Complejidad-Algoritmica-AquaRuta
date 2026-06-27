@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Circle,
@@ -14,18 +14,19 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import MainLayout from "../components/layout/MainLayout";
 import { aquaRutaData } from "../data/aquaRutaData";
+import { runSectorization } from "../services/sectorizationApi";
 import { epsCoverageStatus, epsRequiresValidation } from "../utils/epsCoverage";
 
 const criterionOptions = {
   geografico: {
-    label: "Geográfico",
+    label: "GeogrÃ¡fico",
     source: "geografico",
     help: "Agrupa zonas cercanas para que cada sector sea compacto en el territorio.",
   },
   balanceado: {
     label: "Balanceado",
     source: "mixto",
-    help: "Combina cercanía territorial con una carga de interrupciones más pareja.",
+    help: "Combina cercanÃ­a territorial con una carga de interrupciones mÃ¡s pareja.",
   },
   carga: {
     label: "Por carga",
@@ -35,12 +36,12 @@ const criterionOptions = {
   continuidad: {
     label: "Continuidad territorial",
     source: "geografico",
-    help: "Prioriza sectores continuos y fáciles de recorrer como área de intervención.",
+    help: "Prioriza sectores continuos y fÃ¡ciles de recorrer como Ã¡rea de intervenciÃ³n.",
   },
   densidad: {
     label: "Por densidad",
     source: "mixto",
-    help: "Favorece sectores compactos cuando hay concentración de zonas afectadas.",
+    help: "Favorece sectores compactos cuando hay concentraciÃ³n de zonas afectadas.",
   },
 };
 
@@ -149,7 +150,7 @@ function balanceStatus(sectors, groupInterruptions, groupZones) {
 }
 
 function sectorPriority(sector, index) {
-  if (sector.criticidad === "critica") return "Atención inmediata";
+  if (sector.criticidad === "critica") return "AtenciÃ³n inmediata";
   if (sector.criticidad === "alta" || index === 0) return "Alta prioridad";
   if (sector.criticidad === "media") return "Programar cobertura";
   return "Seguimiento";
@@ -335,6 +336,7 @@ function SectorMap({
 export default function Sectorizacion() {
   const [searchParams] = useSearchParams();
   const sectorizedZones = useMemo(() => aquaRutaData.sectorizedZones || {}, []);
+  const groupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
   const districts = useMemo(() => aquaRutaData.districts || [], []);
   const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
 
@@ -343,36 +345,89 @@ export default function Sectorizacion() {
     [districts]
   );
 
-  const groupIds = Object.keys(sectorizedZones);
+  const groupOptions = useMemo(
+    () =>
+      groupedZones.length
+        ? groupedZones.map((group) => ({
+            groupId: group.id,
+            groupName: group.nombre,
+            groupZonesCount: group.cantidad_zonas || group.zona_ids?.length || 0,
+          }))
+        : Object.values(sectorizedZones).map((group) => ({
+            groupId: group.groupId,
+            groupName: group.groupName,
+            groupZonesCount: group.groupZonesCount || 0,
+          })),
+    [groupedZones, sectorizedZones]
+  );
+  const groupIds = groupOptions.map((group) => group.groupId);
   const requestedGroupId = searchParams.get("grupo") || "";
-  const requestedSectorCount = searchParams.get("sectores") || "3";
 
   const [selectedGroupId, setSelectedGroupId] = useState(
     groupIds.includes(requestedGroupId) ? requestedGroupId : groupIds[0] || ""
   );
-  const [sectorCount, setSectorCount] = useState(requestedSectorCount);
+  const [maxSectorSize, setMaxSectorSize] = useState(8);
+  const [splitCriterion, setSplitCriterion] = useState(DEFAULT_SECTOR_CRITERION);
   const [selectedSectorId, setSelectedSectorId] = useState("");
+  const [sectorizationStatus, setSectorizationStatus] = useState("idle");
+  const [sectorizationError, setSectorizationError] = useState("");
+  const [sectorizationPayload, setSectorizationPayload] = useState(null);
+  const [sectorizationRetryToken, setSectorizationRetryToken] = useState(0);
 
-  const activeGroup = sectorizedZones[selectedGroupId] || null;
-  const sourceCriterion = activeGroup?.criterios?.[DEFAULT_SECTOR_CRITERION]
-    ? DEFAULT_SECTOR_CRITERION
-    : Object.keys(activeGroup?.criterios || {})[0] || "geografico";
+  const activePrecomputedGroup = sectorizedZones[selectedGroupId] || null;
+  const activeOption = groupOptions.find((group) => group.groupId === selectedGroupId) || null;
+  const activeGroup = useMemo(
+    () =>
+      sectorizationPayload?.group
+        ? {
+            groupId: sectorizationPayload.group.groupId,
+            groupName: sectorizationPayload.group.groupName,
+            groupCenter: sectorizationPayload.group.groupCenter,
+            groupInterruptions: activePrecomputedGroup?.groupInterruptions || 0,
+            groupZonesCount: sectorizationPayload.group.inputNodes,
+          }
+        : activePrecomputedGroup || activeOption,
+    [activeOption, activePrecomputedGroup, sectorizationPayload]
+  );
+  const sourceCriterion = splitCriterion;
 
-  const availableSectorCounts = useMemo(() => {
-    if (!activeGroup) return [];
-    return Object.keys(activeGroup.criterios?.[sourceCriterion] || {});
-  }, [activeGroup, sourceCriterion]);
-
-  const effectiveSectorCount = useMemo(() => {
-    if (!availableSectorCounts.length) return "";
-    if (availableSectorCounts.includes(sectorCount)) return sectorCount;
-    return availableSectorCounts[availableSectorCounts.length - 1];
-  }, [availableSectorCounts, sectorCount]);
+  const sectorizationRequest = useMemo(
+    () => ({
+      groupId: selectedGroupId,
+      maxSectorSize,
+      splitCriterion,
+      maxDepth: 12,
+    }),
+    [maxSectorSize, selectedGroupId, splitCriterion]
+  );
 
   const rawSectors = useMemo(() => {
-    if (!activeGroup || !effectiveSectorCount) return [];
-    return activeGroup.criterios?.[sourceCriterion]?.[effectiveSectorCount] || [];
-  }, [activeGroup, effectiveSectorCount, sourceCriterion]);
+    if (sectorizationPayload?.sectors?.length) {
+      return sectorizationPayload.sectors.map((sector) => ({
+        id: sector.sectorId,
+        nombre: sector.nombre,
+        zona_ids: sector.nodeIds,
+        zonas: sector.zonas,
+        cantidad_zonas: sector.summary?.districts || sector.nodeIds.length,
+        interrupciones: sector.summary?.interruptions || 0,
+        criticidad: sector.summary?.maxCriticality || "baja",
+        center: sector.center,
+        criterio: sourceCriterion,
+        personas_afectadas_estimadas: sector.summary?.estimatedAffectedPeople || 0,
+        peso_demanda_familiar: sector.summary?.demandWeight || 0,
+        prioridad_score: sector.summary?.averagePriority || 0,
+        promedio_integrantes_hogar: 0,
+        recursion: sector.recursion,
+        backendSummary: sector.summary,
+      }));
+    }
+    const fallbackCriterion = activePrecomputedGroup?.criterios?.[sourceCriterion]
+      ? sourceCriterion
+      : Object.keys(activePrecomputedGroup?.criterios || {})[0] || "geografico";
+    const byCount = activePrecomputedGroup?.criterios?.[fallbackCriterion] || {};
+    const fallbackCount = Object.keys(byCount)[0] || "";
+    return fallbackCount ? byCount[fallbackCount] || [] : [];
+  }, [activePrecomputedGroup, sectorizationPayload, sourceCriterion]);
 
   const comparison = useMemo(
     () =>
@@ -454,18 +509,60 @@ export default function Sectorizacion() {
 
   const mapFocusKey = [
     selectedGroupId,
-    effectiveSectorCount,
+    maxSectorSize,
+    splitCriterion,
     activeSector?.id || "",
   ].join("|");
+
+  useEffect(() => {
+    if (!sectorizationRequest.groupId) {
+      const timer = window.setTimeout(() => {
+        setSectorizationStatus("idle");
+        setSectorizationPayload(null);
+        setSectorizationError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => {
+      setSectorizationStatus("loading");
+      setSectorizationError("");
+    }, 0);
+
+    runSectorization(sectorizationRequest, { signal: controller.signal })
+      .then((payload) => {
+        setSectorizationPayload(payload);
+        if (!payload.sectors.length) setSectorizationStatus("empty");
+        else if (payload.warnings?.length) setSectorizationStatus("partial");
+        else setSectorizationStatus("success");
+        setSectorizationError("");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setSectorizationPayload(null);
+        setSectorizationStatus("error");
+        setSectorizationError(error?.message || "No se pudo sectorizar el grupo.");
+      });
+
+    return () => {
+      window.clearTimeout(loadingTimer);
+      controller.abort();
+    };
+  }, [sectorizationRequest, sectorizationRetryToken]);
 
   function handleGroupChange(groupId) {
     setSelectedGroupId(groupId);
     setSelectedSectorId("");
   }
 
-  function handleSectorCountChange(value) {
-    setSectorCount(value);
+  function handleMaxSectorSizeChange(value) {
+    setMaxSectorSize(Number(value));
     setSelectedSectorId("");
+  }
+
+  function retrySectorization() {
+    setSectorizationRetryToken((current) => current + 1);
   }
 
   return (
@@ -473,12 +570,12 @@ export default function Sectorizacion() {
       <section className="sector-page">
         <article className="sector-hero-panel">
           <div>
-            <h2>Sectorización</h2>
+            <h2>SectorizaciÃ³n</h2>
             <span>
-              Divide un grupo operativo grande en sectores más pequeños para priorizar la atención.
+              Divide un grupo operativo grande en sectores mÃ¡s pequeÃ±os para priorizar la atenciÃ³n.
             </span>
             <small>
-              Un sector reúne zonas cercanas del mismo grupo para repartir carga, priorizar atención
+              Un sector reÃºne zonas cercanas del mismo grupo para repartir carga, priorizar atenciÃ³n
               y revisar cobertura EPS.
             </small>
           </div>
@@ -503,7 +600,7 @@ export default function Sectorizacion() {
                 value={selectedGroupId}
                 onChange={(event) => handleGroupChange(event.target.value)}
               >
-                {Object.values(sectorizedZones).map((group) => (
+                {groupOptions.map((group) => (
                   <option key={group.groupId} value={group.groupId}>
                     {group.groupName}
                   </option>
@@ -511,21 +608,59 @@ export default function Sectorizacion() {
               </select>
             </label>
             <label className="control-group">
-              <span className="control-label">Número de sectores a generar</span>
+              <span className="control-label">Tamano maximo de sector</span>
+              <input
+                className="control-input"
+                type="number"
+                min="1"
+                max="50"
+                value={maxSectorSize}
+                onChange={(event) => handleMaxSectorSizeChange(event.target.value)}
+              />
+            </label>
+            <label className="control-group">
+              <span className="control-label">Criterio de division</span>
               <select
                 className="control-select"
-                value={effectiveSectorCount}
-                onChange={(event) => handleSectorCountChange(event.target.value)}
+                value={splitCriterion}
+                onChange={(event) => {
+                  setSplitCriterion(event.target.value);
+                  setSelectedSectorId("");
+                }}
               >
-                {availableSectorCounts.map((count) => (
-                  <option key={count} value={count}>
-                    {count} sectores
-                  </option>
-                ))}
+                <option value="geografico">Geografico</option>
+                <option value="mixto">Mixto</option>
+                <option value="carga">Por carga</option>
+                <option value="prioridad">Por prioridad</option>
               </select>
             </label>
           </div>
 
+          {sectorizationStatus === "idle" && (
+            <div className="local-route-status">Selecciona un grupo operativo.</div>
+          )}
+          {sectorizationStatus === "loading" && (
+            <div className="local-route-status">Sectorizando el grupo...</div>
+          )}
+          {sectorizationStatus === "success" && sectorizationPayload?.metadata?.splitCount === 0 && (
+            <div className="local-route-status">
+              El grupo ya cumple el tamano maximo y no requiere division.
+            </div>
+          )}
+          {sectorizationStatus === "empty" && (
+            <div className="local-route-status">No hay nodos disponibles para sectorizar.</div>
+          )}
+          {sectorizationStatus === "partial" && (
+            <div className="local-route-status warning">
+              La sectorizacion se completo con advertencias.
+            </div>
+          )}
+          {sectorizationStatus === "error" && (
+            <div className="local-route-status error">
+              <span>{sectorizationError || "No se pudo sectorizar el grupo."}</span>
+              <button type="button" onClick={retrySectorization}>Reintentar</button>
+            </div>
+          )}
         </article>
 
         <section className="sector-comparison-grid">
@@ -545,7 +680,7 @@ export default function Sectorizacion() {
               <div>
                 <span>Diferencia respecto a la carga esperada</span>
                 <strong>{formatNumber(comparison.diffInterruptions)}</strong>
-                <small>{comparison.spreadPct.toFixed(1)}% frente a una distribución equilibrada</small>
+                <small>{comparison.spreadPct.toFixed(1)}% frente a una distribuciÃ³n equilibrada</small>
               </div>
             </div>
           </article>
@@ -572,7 +707,7 @@ export default function Sectorizacion() {
                     <th>Peso demanda</th>
                     <th>Criticidad</th>
                     <th>Prioridad</th>
-                    <th>Participación de carga</th>
+                    <th>ParticipaciÃ³n de carga</th>
                     <th>EPS de referencia</th>
                   </tr>
                 </thead>
@@ -666,7 +801,7 @@ export default function Sectorizacion() {
                     <strong>{Number(activeSector.avgHouseholdSize || 0).toFixed(2)}</strong>
                   </div>
                   <div>
-                    <span>Participación de carga</span>
+                    <span>ParticipaciÃ³n de carga</span>
                     <strong>{activeSector.loadPct.toFixed(1)}%</strong>
                   </div>
                 </div>
@@ -682,16 +817,16 @@ export default function Sectorizacion() {
 
                 {epsRequiresValidation(activeSector.epsCoverage) && (
                   <div className="territory-route-status warning">
-                    <strong>Validación operativa requerida</strong>
+                    <strong>ValidaciÃ³n operativa requerida</strong>
                     <span>
-                      La EPS de referencia debe revisarse antes de usarla como origen de atención.
+                      La EPS de referencia debe revisarse antes de usarla como origen de atenciÃ³n.
                     </span>
                   </div>
                 )}
 
                 <p className="territory-context-note">
                   Este sector pertenece al grupo operativo seleccionado y contiene las zonas que
-                  aparecen listadas. La carga representa su proporción de interrupciones respecto
+                  aparecen listadas. La carga representa su proporciÃ³n de interrupciones respecto
                   al total del grupo.
                 </p>
 

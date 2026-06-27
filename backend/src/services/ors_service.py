@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from contextlib import contextmanager
 import hashlib
 import json
 import logging
@@ -12,6 +13,13 @@ import threading
 import time
 
 import requests
+
+from config.operational_constants import (
+    DEFAULT_TIMEOUT_SECONDS,
+    DISTANCE_COST_FACTOR,
+    ORS_MAX_ALTERNATIVE_ROUTES,
+    TIME_COST_FACTOR,
+)
 
 logger = logging.getLogger("aquaruta.ors")
 STRATEGY_VERSION = "fragility-v1"
@@ -31,8 +39,8 @@ def clamp(value, low=0.0, high=1.0) -> float:
 
 def calcular_costo_operativo(distancia_km, duracion_min, stop_count=1) -> float:
     return round(
-        float(distancia_km or 0) * 4.6
-        + float(duracion_min or 0) * 0.85
+        float(distancia_km or 0) * DISTANCE_COST_FACTOR
+        + float(duracion_min or 0) * TIME_COST_FACTOR
         + max(0, int(stop_count or 0)) * 8,
         2,
     )
@@ -60,9 +68,9 @@ class RouteConfig:
                 "ORS_BASE_URL",
                 "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
             ),
-            timeout_seconds=float(os.getenv("ORS_TIMEOUT_SECONDS", os.getenv("ROUTE_TIMEOUT_SECONDS", "12"))),
+            timeout_seconds=float(os.getenv("ORS_TIMEOUT_SECONDS", os.getenv("ROUTE_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))),
             max_retries=int(os.getenv("ORS_MAX_RETRIES", "2")),
-            alternative_target_count=max(1, min(int(os.getenv("ORS_ALTERNATIVE_TARGET_COUNT", "3")), 3)),
+            alternative_target_count=max(1, min(int(os.getenv("ORS_ALTERNATIVE_TARGET_COUNT", str(ORS_MAX_ALTERNATIVE_ROUTES))), ORS_MAX_ALTERNATIVE_ROUTES)),
             cache_ttl_hours=float(os.getenv("ORS_CACHE_TTL_HOURS", "168")),
             max_operational_distance_km=float(os.getenv("MAX_OPERATIONAL_DISTANCE_KM", "80")),
             max_operational_duration_min=float(os.getenv("MAX_OPERATIONAL_DURATION_MIN", "180")),
@@ -80,8 +88,14 @@ class ORSService:
         self._last_request_at = 0.0
         self._init_cache()
 
+    @contextmanager
     def _connect(self):
-        return sqlite3.connect(self.config.cache_path, timeout=5)
+        conn = sqlite3.connect(self.config.cache_path, timeout=5)
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
 
     def _init_cache(self) -> None:
         with self._connect() as conn:
@@ -254,7 +268,7 @@ class ORSService:
             requested = int(alternative_routes.get("target_count", self.config.alternative_target_count))
         else:
             requested = self.config.alternative_target_count
-        return max(1, min(requested, self.config.alternative_target_count, 3))
+        return max(1, min(requested, self.config.alternative_target_count, ORS_MAX_ALTERNATIVE_ROUTES))
 
     def _valid_feature(self, feature):
         summary = feature.get("properties", {}).get("summary", {})

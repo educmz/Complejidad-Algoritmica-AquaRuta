@@ -53,6 +53,15 @@ def _build_cost_matrix(origin_center, nodes, criterion="distancia"):
     return matrix
 
 
+def build_cost_matrix(origin_center, nodes, criterion="distancia"):
+    clean_nodes = []
+    for node in nodes:
+        center = _get_center(node)
+        if center:
+            clean_nodes.append({**node, "center": center})
+    return _build_cost_matrix(list(origin_center), clean_nodes, criterion=criterion)
+
+
 def _clean_result_node(node):
     return {
         "id": node["id"],
@@ -81,6 +90,8 @@ def solve_tsp_memoization(
             "total_distance": 0.0,
             "criterion": criterion,
             "explored_states": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
             "used_fallback": False,
             "route_points": [],
             "error": "origin_center invalido",
@@ -111,6 +122,8 @@ def solve_tsp_memoization(
             "total_distance": 0.0,
             "criterion": criterion,
             "explored_states": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
             "used_fallback": False,
             "route_points": [list(origin_center)],
         }
@@ -151,6 +164,8 @@ def solve_tsp_memoization(
             "total_distance": round(total_distance, 6),
             "criterion": criterion,
             "explored_states": len(order_indices),
+            "cache_hits": 0,
+            "cache_misses": len(order_indices),
             "used_fallback": True,
             "route_points": route_points,
         }
@@ -203,6 +218,7 @@ def solve_tsp_memoization(
 
     raw_best_cost = dp(0, 0)
     best_indices = reconstruct()
+    cache_info = dp.cache_info()
     best_order = [clean_nodes[idx - 1] for idx in best_indices]
     total_distance = 0.0
     route_points = [list(origin_center)]
@@ -220,6 +236,8 @@ def solve_tsp_memoization(
         "total_distance": round(total_distance, 6),
         "criterion": criterion,
         "explored_states": explored_states,
+        "cache_hits": cache_info.hits,
+        "cache_misses": cache_info.misses,
         "used_fallback": used_fallback,
         "route_points": route_points,
     }

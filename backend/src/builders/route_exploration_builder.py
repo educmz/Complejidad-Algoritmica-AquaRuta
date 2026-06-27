@@ -1,5 +1,6 @@
 from algorithms.dijkstra import dijkstra
 from builders.dataset_builder import save_json
+from services.edge_metrics import build_edge_metrics, criterion_to_weight_field
 
 
 ROUTE_CRITERIA = ("distancia", "tiempo", "costo")
@@ -52,8 +53,16 @@ def _build_adjacency(origin_node, nodes, neighbors_per_node=4):
         for other in graph_nodes:
             if other["id"] == node["id"] or not other.get("center"):
                 continue
-            candidates.append({"to": other["id"], "weight": _distance(center, other["center"])})
-        candidates.sort(key=lambda item: item["weight"])
+            metrics = build_edge_metrics(node, other)
+            candidates.append(
+                {
+                    "to": other["id"],
+                    "metrics": metrics,
+                    **metrics,
+                    "weight": metrics["distance_weight"],
+                }
+            )
+        candidates.sort(key=lambda item: item["distance_weight"])
         adjacency[node["id"]] = candidates[:neighbors_per_node]
     return adjacency
 
@@ -72,23 +81,51 @@ def _build_edges_from_adjacency(adjacency):
                 {
                     "source": source,
                     "target": target,
-                    "weight": round(edge["weight"], 6),
+                    "weight": round(edge["distance_weight"], 6),
+                    "distance_km": edge["distance_km"],
+                    "road_distance_km": edge["road_distance_km"],
+                    "duration_min": edge["duration_min"],
+                    "operational_cost": edge["operational_cost"],
+                    "traffic_factor": edge["traffic_factor"],
+                    "distance_weight": edge["distance_weight"],
+                    "time_weight": edge["time_weight"],
+                    "cost_weight": edge["cost_weight"],
                     "edge_type": "logical",
                 }
             )
     return edges
 
 
-def _build_path_edges(path):
-    return [
-        {
-            "source": path[index],
-            "target": path[index + 1],
-            "isShortestPath": True,
-            "edge_type": "logical",
-        }
-        for index in range(len(path) - 1)
-    ]
+def _edge_lookup(adjacency):
+    return {
+        (source, edge["to"]): edge
+        for source, neighbors in adjacency.items()
+        for edge in neighbors
+    }
+
+
+def _build_path_edges(path, adjacency, weight_field):
+    edges_by_pair = _edge_lookup(adjacency)
+    edges = []
+    for index in range(len(path) - 1):
+        source = path[index]
+        target = path[index + 1]
+        edge = edges_by_pair.get((source, target), {})
+        edges.append(
+            {
+                "source": source,
+                "target": target,
+                "selectedWeight": round(float(edge.get(weight_field, 0) or 0), 6),
+                "distanceKm": edge.get("distance_km", 0),
+                "roadDistanceKm": edge.get("road_distance_km", 0),
+                "durationMin": edge.get("duration_min", 0),
+                "operationalCost": edge.get("operational_cost", 0),
+                "trafficFactor": edge.get("traffic_factor", 0),
+                "isShortestPath": True,
+                "edge_type": "logical",
+            }
+        )
+    return edges
 
 
 def _route_points_from_path(path, node_lookup):
@@ -99,30 +136,46 @@ def _route_points_from_path(path, node_lookup):
     ]
 
 
-def _build_route_for_node(origin_node, nodes, destination):
+def _summary_from_edges(shortest, path_edges):
+    return {
+        "totalWeight": shortest.get("cost", 0.0),
+        "totalDistanceKm": round(sum(float(edge.get("distanceKm", 0) or 0) for edge in path_edges), 6),
+        "totalRoadDistanceKm": round(sum(float(edge.get("roadDistanceKm", 0) or 0) for edge in path_edges), 6),
+        "totalDurationMin": round(sum(float(edge.get("durationMin", 0) or 0) for edge in path_edges), 6),
+        "totalOperationalCost": round(sum(float(edge.get("operationalCost", 0) or 0) for edge in path_edges), 6),
+        "visitedNodes": len(shortest.get("visited_order", [])),
+        "relaxedEdges": int(shortest.get("relaxed_edges", 0) or 0),
+    }
+
+
+def _build_route_for_node(origin_node, nodes, destination, criterion):
+    weight_field = criterion_to_weight_field(criterion)
     if not origin_node or not destination:
         return {
             "path": [],
             "cost": 0.0,
+            "criterion": criterion,
             "visited_order": [],
             "route_points": [],
             "path_edges": [],
+            "summary": _summary_from_edges({}, []),
+            "reachable": False,
+            "weightField": weight_field,
             "algorithm": "dijkstra.py",
         }
     adjacency = _build_adjacency(origin_node, nodes)
-    shortest = dijkstra(adjacency, origin_node["id"], destination["id"])
+    shortest = dijkstra(adjacency, origin_node["id"], destination["id"], weight_field=weight_field)
     node_lookup = {node["id"]: node for node in [origin_node] + nodes}
+    path_edges = _build_path_edges(shortest.get("path", []), adjacency, weight_field)
     return {
         **shortest,
+        "criterion": criterion,
         "route_points": _route_points_from_path(shortest.get("path", []), node_lookup),
-        "path_edges": _build_path_edges(shortest.get("path", [])),
+        "path_edges": path_edges,
+        "summary": _summary_from_edges(shortest, path_edges),
+        "weightField": weight_field,
         "algorithm": "dijkstra.py",
     }
-
-
-def _scale_route(route, criterion):
-    factor = {"distancia": 1.0, "tiempo": 1.25, "costo": 1.4}.get(criterion, 1.0)
-    return {**route, "criterion": criterion, "cost": round(float(route.get("cost", 0.0)) * factor, 6)}
 
 
 def _origin_node_from_origin(origin):
@@ -160,14 +213,16 @@ def _build_routes_by_destination(nodes, eps_origins):
         origin = _closest_origin(destination.get("center"), eps_origins)
         origin_node = _origin_node_from_origin(origin)
         edges = _build_edges_from_adjacency(_build_adjacency(origin_node, nodes))
-        base_route = _build_route_for_node(origin_node, nodes, destination)
         routes[destination["id"]] = {
             "destinationId": destination["id"],
             "destinationName": destination.get("nombre", destination["id"]),
             "origin": origin,
             "originNode": origin_node,
             "edges": edges,
-            "criteria": {criterion: _scale_route(base_route, criterion) for criterion in ROUTE_CRITERIA},
+            "criteria": {
+                criterion: _build_route_for_node(origin_node, nodes, destination, criterion)
+                for criterion in ROUTE_CRITERIA
+            },
         }
     return routes
 

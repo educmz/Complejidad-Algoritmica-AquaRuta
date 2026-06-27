@@ -1,12 +1,7 @@
 from algorithms.dfs import dfs
 from algorithms.bfs import bfs
 from algorithms.backtracking import solve_backtracking_route
-
-
-def _distance(a, b):
-    if not a or not b:
-        return float("inf")
-    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+from services.graph_adjacency import _distance, build_logical_adjacency
 
 
 def _district_lookup(districts_summary):
@@ -19,21 +14,6 @@ def _build_group_districts(group, district_lookup):
         for district_id in group.get("zona_ids", [])
         if district_id in district_lookup
     ]
-
-
-def _build_logical_adjacency(districts, max_neighbors=3):
-    adjacency = {district["id"]: [] for district in districts}
-    for district in districts:
-        if not district.get("center"):
-            continue
-        neighbors = []
-        for other in districts:
-            if other["id"] == district["id"] or not other.get("center"):
-                continue
-            neighbors.append({"id": other["id"], "distance": _distance(district["center"], other["center"])})
-        neighbors.sort(key=lambda item: item["distance"])
-        adjacency[district["id"]] = [item["id"] for item in neighbors[:max_neighbors]]
-    return adjacency
 
 
 def _closest_origin(group_center, eps_origins):
@@ -73,7 +53,7 @@ def build_operational_routes(districts_summary, grouped_zones, eps_origins, top_
         group_districts = _build_group_districts(group, district_lookup)
         if not group_districts:
             continue
-        adjacency = _build_logical_adjacency(group_districts, max_neighbors=3)
+        adjacency = build_logical_adjacency(group_districts, max_neighbors=3)
         start_id = group_districts[0]["id"]
         origin = _closest_origin(group.get("center"), eps_origins)
         dfs_order = [district_lookup[item_id] for item_id in dfs(adjacency, start_id) if item_id in district_lookup]
