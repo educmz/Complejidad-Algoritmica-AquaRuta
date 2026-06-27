@@ -1,0 +1,1344 @@
+{
+  "grupo-1": {
+    "groupId": "grupo-1",
+    "groupName": "Grupo 1",
+    "origin": {
+      "id": "eps-sedapal-s.-a.",
+      "prestador": "SEDAPAL S. A.",
+      "departamento": "Lima",
+      "provincia": "Lima",
+      "distrito": "El Agustino",
+      "lat": -12.048333,
+      "lon": -77.000556,
+      "tipo_origen": "sede_referencial",
+      "descripcion": "Origen operativo referencial asociado al prestador"
+    },
+    "dfs": {
+      "startDistrictId": "lima-lima-san-juan-de-lurigancho",
+      "order": [
+        {
+          "id": "lima-lima-san-juan-de-lurigancho",
+          "nombre": "San Juan De Lurigancho",
+          "center": [
+            -12.029722,
+            -77.01
+          ],
+          "interrupciones": 3987
+        },
+        {
+          "id": "lima-lima-el-agustino",
+          "nombre": "El Agustino",
+          "center": [
+            -12.048333,
+            -77.000556
+          ],
+          "interrupciones": 324
+        },
+        {
+          "id": "lima-lima-rimac",
+          "nombre": "Rimac",
+          "center": [
+            -12.042222,
+            -77.026944
+          ],
+          "interrupciones": 619
+        },
+        {
+          "id": "lima-lima-lima",
+          "nombre": "Lima",
+          "center": [
+            -12.045278,
+            -77.030833
+          ],
+          "interrupciones": 937
+        },
+        {
+          "id": "lima-lima-la-victoria",
+          "nombre": "La Victoria",
+          "center": [
+            -12.065,
+            -77.030833
+          ],
+          "interrupciones": 446
+        },
+        {
+          "id": "lima-lima-jesus-maria",
+          "nombre": "Jesus Maria",
+          "center": [
+            -12.075556,
+            -77.043333
+          ],
+          "interrupciones": 133
+        },
+        {
+          "id": "lima-lima-lince",
+          "nombre": "Lince",
+          "center": [
+            -12.084444,
+            -77.030278
+          ],
+          "interrupciones": 108
+        },
+        {
+          "id": "lima-lima-san-isidro",
+          "nombre": "San Isidro",
+          "center": [
+            -12.097778,
+            -77.027222
+          ],
+          "interrupciones": 292
+        },
+        {
+          "id": "lima-lima-surquillo",
+          "nombre": "Surquillo",
+          "center": [
+            -12.118611,
+            -77.021667
+          ],
+          "interrupciones": 252
+        },
+        {
+          "id": "lima-lima-miraflores",
+          "nombre": "Miraflores",
+          "center": [
+            -12.121667,
+            -77.029167
+          ],
+          "interrupciones": 360
+        },
+        {
+          "id": "lima-lima-barranco",
+          "nombre": "Barranco",
+          "center": [
+            -12.149167,
+            -77.021667
+          ],
+          "interrupciones": 120
+        },
+        {
+          "id": "lima-lima-santiago-de-surco",
+          "nombre": "Santiago De Surco",
+          "center": [
+            -12.145,
+            -77.005
+          ],
+          "interrupciones": 1072
+        },
+        {
+          "id": "lima-lima-chorrillos",
+          "nombre": "Chorrillos",
+          "center": [
+            -12.176944,
+            -77.016389
+          ],
+          "interrupciones": 979
+        },
+        {
+          "id": "lima-lima-san-juan-de-miraflores",
+          "nombre": "San Juan De Miraflores",
+          "center": [
+            -12.163611,
+            -76.963611
+          ],
+          "interrupciones": 2054
+        },
+        {
+          "id": "lima-lima-villa-maria-del-triunfo",
+          "nombre": "Villa Maria Del Triunfo",
+          "center": [
+            -12.1625,
+            -76.943611
+          ],
+          "interrupciones": 2976
+        },
+        {
+          "id": "lima-lima-villa-el-salvador",
+          "nombre": "Villa El Salvador",
+          "center": [
+            -12.213333,
+            -76.937222
+          ],
+          "interrupciones": 2312
+        },
+        {
+          "id": "lima-lima-pachacamac",
+          "nombre": "Pachacamac",
+          "center": [
+            -12.187222,
+            -76.866667
+          ],
+          "interrupciones": 469
+        },
+        {
+          "id": "lima-lima-cieneguilla",
+          "nombre": "Cieneguilla",
+          "center": [
+            -12.120278,
+            -76.814167
+          ],
+          "interrupciones": 84
+        },
+        {
+          "id": "lima-lima-la-molina",
+          "nombre": "La Molina",
+          "center": [
+            -12.078056,
+            -76.916667
+          ],
+          "interrupciones": 1067
+        },
+        {
+          "id": "lima-lima-ate",
+          "nombre": "Ate",
+          "center": [
+            -12.026389,
+            -76.921389
+          ],
+          "interrupciones": 1264
+        },
+        {
+          "id": "lima-lima-santa-anita",
+          "nombre": "Santa Anita",
+          "center": [
+            -12.043889,
+            -76.971389
+          ],
+          "interrupciones": 409
+        },
+        {
+          "id": "lima-lima-san-luis",
+          "nombre": "San Luis",
+          "center": [
+            -12.075556,
+            -76.993611
+          ],
+          "interrupciones": 75
+        },
+        {
+          "id": "lima-lima-san-borja",
+          "nombre": "San Borja",
+          "center": [
+            -12.107222,
+            -76.998889
+          ],
+          "interrupciones": 314
+        },
+        {
+          "id": "lima-lima-brena",
+          "nombre": "Breña",
+          "center": [
+            -12.058889,
+            -77.046111
+          ],
+          "interrupciones": 195
+        }
+      ]
+    },
+    "bfs": {
+      "startDistrictId": "lima-lima-san-juan-de-lurigancho",
+      "order": [
+        {
+          "id": "lima-lima-san-juan-de-lurigancho",
+          "nombre": "San Juan De Lurigancho",
+          "center": [
+            -12.029722,
+            -77.01
+          ],
+          "interrupciones": 3987
+        },
+        {
+          "id": "lima-lima-el-agustino",
+          "nombre": "El Agustino",
+          "center": [
+            -12.048333,
+            -77.000556
+          ],
+          "interrupciones": 324
+        },
+        {
+          "id": "lima-lima-rimac",
+          "nombre": "Rimac",
+          "center": [
+            -12.042222,
+            -77.026944
+          ],
+          "interrupciones": 619
+        },
+        {
+          "id": "lima-lima-lima",
+          "nombre": "Lima",
+          "center": [
+            -12.045278,
+            -77.030833
+          ],
+          "interrupciones": 937
+        },
+        {
+          "id": "lima-lima-san-luis",
+          "nombre": "San Luis",
+          "center": [
+            -12.075556,
+            -76.993611
+          ],
+          "interrupciones": 75
+        },
+        {
+          "id": "lima-lima-la-victoria",
+          "nombre": "La Victoria",
+          "center": [
+            -12.065,
+            -77.030833
+          ],
+          "interrupciones": 446
+        },
+        {
+          "id": "lima-lima-brena",
+          "nombre": "Breña",
+          "center": [
+            -12.058889,
+            -77.046111
+          ],
+          "interrupciones": 195
+        },
+        {
+          "id": "lima-lima-san-borja",
+          "nombre": "San Borja",
+          "center": [
+            -12.107222,
+            -76.998889
+          ],
+          "interrupciones": 314
+        },
+        {
+          "id": "lima-lima-lince",
+          "nombre": "Lince",
+          "center": [
+            -12.084444,
+            -77.030278
+          ],
+          "interrupciones": 108
+        },
+        {
+          "id": "lima-lima-jesus-maria",
+          "nombre": "Jesus Maria",
+          "center": [
+            -12.075556,
+            -77.043333
+          ],
+          "interrupciones": 133
+        },
+        {
+          "id": "lima-lima-surquillo",
+          "nombre": "Surquillo",
+          "center": [
+            -12.118611,
+            -77.021667
+          ],
+          "interrupciones": 252
+        },
+        {
+          "id": "lima-lima-san-isidro",
+          "nombre": "San Isidro",
+          "center": [
+            -12.097778,
+            -77.027222
+          ],
+          "interrupciones": 292
+        },
+        {
+          "id": "lima-lima-miraflores",
+          "nombre": "Miraflores",
+          "center": [
+            -12.121667,
+            -77.029167
+          ],
+          "interrupciones": 360
+        },
+        {
+          "id": "lima-lima-barranco",
+          "nombre": "Barranco",
+          "center": [
+            -12.149167,
+            -77.021667
+          ],
+          "interrupciones": 120
+        },
+        {
+          "id": "lima-lima-santiago-de-surco",
+          "nombre": "Santiago De Surco",
+          "center": [
+            -12.145,
+            -77.005
+          ],
+          "interrupciones": 1072
+        },
+        {
+          "id": "lima-lima-chorrillos",
+          "nombre": "Chorrillos",
+          "center": [
+            -12.176944,
+            -77.016389
+          ],
+          "interrupciones": 979
+        },
+        {
+          "id": "lima-lima-san-juan-de-miraflores",
+          "nombre": "San Juan De Miraflores",
+          "center": [
+            -12.163611,
+            -76.963611
+          ],
+          "interrupciones": 2054
+        },
+        {
+          "id": "lima-lima-villa-maria-del-triunfo",
+          "nombre": "Villa Maria Del Triunfo",
+          "center": [
+            -12.1625,
+            -76.943611
+          ],
+          "interrupciones": 2976
+        },
+        {
+          "id": "lima-lima-villa-el-salvador",
+          "nombre": "Villa El Salvador",
+          "center": [
+            -12.213333,
+            -76.937222
+          ],
+          "interrupciones": 2312
+        },
+        {
+          "id": "lima-lima-pachacamac",
+          "nombre": "Pachacamac",
+          "center": [
+            -12.187222,
+            -76.866667
+          ],
+          "interrupciones": 469
+        },
+        {
+          "id": "lima-lima-cieneguilla",
+          "nombre": "Cieneguilla",
+          "center": [
+            -12.120278,
+            -76.814167
+          ],
+          "interrupciones": 84
+        },
+        {
+          "id": "lima-lima-la-molina",
+          "nombre": "La Molina",
+          "center": [
+            -12.078056,
+            -76.916667
+          ],
+          "interrupciones": 1067
+        },
+        {
+          "id": "lima-lima-ate",
+          "nombre": "Ate",
+          "center": [
+            -12.026389,
+            -76.921389
+          ],
+          "interrupciones": 1264
+        },
+        {
+          "id": "lima-lima-santa-anita",
+          "nombre": "Santa Anita",
+          "center": [
+            -12.043889,
+            -76.971389
+          ],
+          "interrupciones": 409
+        }
+      ]
+    },
+    "backtracking": {
+      "best_order": [
+        {
+          "id": "lima-lima-san-juan-de-lurigancho",
+          "nombre": "San Juan De Lurigancho",
+          "center": [
+            -12.029722,
+            -77.01
+          ],
+          "interrupciones": 3987
+        },
+        {
+          "id": "lima-lima-san-juan-de-miraflores",
+          "nombre": "San Juan De Miraflores",
+          "center": [
+            -12.163611,
+            -76.963611
+          ],
+          "interrupciones": 2054
+        },
+        {
+          "id": "lima-lima-villa-maria-del-triunfo",
+          "nombre": "Villa Maria Del Triunfo",
+          "center": [
+            -12.1625,
+            -76.943611
+          ],
+          "interrupciones": 2976
+        },
+        {
+          "id": "lima-lima-villa-el-salvador",
+          "nombre": "Villa El Salvador",
+          "center": [
+            -12.213333,
+            -76.937222
+          ],
+          "interrupciones": 2312
+        }
+      ],
+      "best_cost": 0.233831,
+      "explored_solutions": 3
+    }
+  },
+  "grupo-2": {
+    "groupId": "grupo-2",
+    "groupName": "Grupo 2",
+    "origin": {
+      "id": "eps-sedapar-s.-a.",
+      "prestador": "SEDAPAR S. A.",
+      "departamento": "Arequipa",
+      "provincia": "Arequipa",
+      "distrito": "Arequipa",
+      "lat": -16.393333,
+      "lon": -71.528889,
+      "tipo_origen": "sede_referencial",
+      "descripcion": "Origen operativo referencial asociado al prestador"
+    },
+    "dfs": {
+      "startDistrictId": "arequipa-arequipa-cerro-colorado",
+      "order": [
+        {
+          "id": "arequipa-arequipa-cerro-colorado",
+          "nombre": "Cerro Colorado",
+          "center": [
+            -16.376389,
+            -71.560833
+          ],
+          "interrupciones": 733
+        },
+        {
+          "id": "arequipa-arequipa-cayma",
+          "nombre": "Cayma",
+          "center": [
+            -16.3625,
+            -71.544167
+          ],
+          "interrupciones": 439
+        },
+        {
+          "id": "arequipa-arequipa-yanahuara",
+          "nombre": "Yanahuara",
+          "center": [
+            -16.381944,
+            -71.536389
+          ],
+          "interrupciones": 133
+        },
+        {
+          "id": "arequipa-arequipa-arequipa",
+          "nombre": "Arequipa",
+          "center": [
+            -16.393333,
+            -71.528889
+          ],
+          "interrupciones": 349
+        },
+        {
+          "id": "arequipa-arequipa-miraflores",
+          "nombre": "Miraflores",
+          "center": [
+            -16.394722,
+            -71.5225
+          ],
+          "interrupciones": 343
+        },
+        {
+          "id": "arequipa-arequipa-alto-selva-alegre",
+          "nombre": "Alto Selva Alegre",
+          "center": [
+            -16.38,
+            -71.521111
+          ],
+          "interrupciones": 430
+        }
+      ]
+    },
+    "bfs": {
+      "startDistrictId": "arequipa-arequipa-cerro-colorado",
+      "order": [
+        {
+          "id": "arequipa-arequipa-cerro-colorado",
+          "nombre": "Cerro Colorado",
+          "center": [
+            -16.376389,
+            -71.560833
+          ],
+          "interrupciones": 733
+        },
+        {
+          "id": "arequipa-arequipa-cayma",
+          "nombre": "Cayma",
+          "center": [
+            -16.3625,
+            -71.544167
+          ],
+          "interrupciones": 439
+        },
+        {
+          "id": "arequipa-arequipa-yanahuara",
+          "nombre": "Yanahuara",
+          "center": [
+            -16.381944,
+            -71.536389
+          ],
+          "interrupciones": 133
+        },
+        {
+          "id": "arequipa-arequipa-arequipa",
+          "nombre": "Arequipa",
+          "center": [
+            -16.393333,
+            -71.528889
+          ],
+          "interrupciones": 349
+        },
+        {
+          "id": "arequipa-arequipa-alto-selva-alegre",
+          "nombre": "Alto Selva Alegre",
+          "center": [
+            -16.38,
+            -71.521111
+          ],
+          "interrupciones": 430
+        },
+        {
+          "id": "arequipa-arequipa-miraflores",
+          "nombre": "Miraflores",
+          "center": [
+            -16.394722,
+            -71.5225
+          ],
+          "interrupciones": 343
+        }
+      ]
+    },
+    "backtracking": {
+      "best_order": [
+        {
+          "id": "arequipa-arequipa-cerro-colorado",
+          "nombre": "Cerro Colorado",
+          "center": [
+            -16.376389,
+            -71.560833
+          ],
+          "interrupciones": 733
+        },
+        {
+          "id": "arequipa-arequipa-cayma",
+          "nombre": "Cayma",
+          "center": [
+            -16.3625,
+            -71.544167
+          ],
+          "interrupciones": 439
+        },
+        {
+          "id": "arequipa-arequipa-alto-selva-alegre",
+          "nombre": "Alto Selva Alegre",
+          "center": [
+            -16.38,
+            -71.521111
+          ],
+          "interrupciones": 430
+        },
+        {
+          "id": "arequipa-arequipa-paucarpata",
+          "nombre": "Paucarpata",
+          "center": [
+            -16.432778,
+            -71.504722
+          ],
+          "interrupciones": 628
+        }
+      ],
+      "best_cost": 0.142064,
+      "explored_solutions": 4
+    }
+  },
+  "grupo-3": {
+    "groupId": "grupo-3",
+    "groupName": "Grupo 3",
+    "origin": {
+      "id": "eps-seda-ayacucho-s.-a.",
+      "prestador": "SEDA AYACUCHO S. A.",
+      "departamento": "Ayacucho",
+      "provincia": "Huamanga",
+      "distrito": "Ayacucho",
+      "lat": -13.160278,
+      "lon": -74.225278,
+      "tipo_origen": "sede_referencial",
+      "descripcion": "Origen operativo referencial asociado al prestador"
+    },
+    "dfs": {
+      "startDistrictId": "ayacucho-huamanga-ayacucho",
+      "order": [
+        {
+          "id": "ayacucho-huamanga-ayacucho",
+          "nombre": "Ayacucho",
+          "center": [
+            -13.160278,
+            -74.225278
+          ],
+          "interrupciones": 1233
+        },
+        {
+          "id": "ayacucho-huamanga-san-juan-bautista",
+          "nombre": "San Juan Bautista",
+          "center": [
+            -13.166667,
+            -74.223611
+          ],
+          "interrupciones": 438
+        },
+        {
+          "id": "ayacucho-huamanga-carmen-alto",
+          "nombre": "Carmen Alto",
+          "center": [
+            -13.179444,
+            -74.220556
+          ],
+          "interrupciones": 207
+        },
+        {
+          "id": "ayacucho-huamanga-jesus-nazareno",
+          "nombre": "Jesus Nazareno",
+          "center": [
+            -13.154167,
+            -74.2125
+          ],
+          "interrupciones": 145
+        }
+      ]
+    },
+    "bfs": {
+      "startDistrictId": "ayacucho-huamanga-ayacucho",
+      "order": [
+        {
+          "id": "ayacucho-huamanga-ayacucho",
+          "nombre": "Ayacucho",
+          "center": [
+            -13.160278,
+            -74.225278
+          ],
+          "interrupciones": 1233
+        },
+        {
+          "id": "ayacucho-huamanga-san-juan-bautista",
+          "nombre": "San Juan Bautista",
+          "center": [
+            -13.166667,
+            -74.223611
+          ],
+          "interrupciones": 438
+        },
+        {
+          "id": "ayacucho-huamanga-jesus-nazareno",
+          "nombre": "Jesus Nazareno",
+          "center": [
+            -13.154167,
+            -74.2125
+          ],
+          "interrupciones": 145
+        },
+        {
+          "id": "ayacucho-huamanga-carmen-alto",
+          "nombre": "Carmen Alto",
+          "center": [
+            -13.179444,
+            -74.220556
+          ],
+          "interrupciones": 207
+        }
+      ]
+    },
+    "backtracking": {
+      "best_order": [
+        {
+          "id": "ayacucho-huamanga-ayacucho",
+          "nombre": "Ayacucho",
+          "center": [
+            -13.160278,
+            -74.225278
+          ],
+          "interrupciones": 1233
+        },
+        {
+          "id": "ayacucho-huamanga-jesus-nazareno",
+          "nombre": "Jesus Nazareno",
+          "center": [
+            -13.154167,
+            -74.2125
+          ],
+          "interrupciones": 145
+        },
+        {
+          "id": "ayacucho-huamanga-san-juan-bautista",
+          "nombre": "San Juan Bautista",
+          "center": [
+            -13.166667,
+            -74.223611
+          ],
+          "interrupciones": 438
+        },
+        {
+          "id": "ayacucho-huamanga-carmen-alto",
+          "nombre": "Carmen Alto",
+          "center": [
+            -13.179444,
+            -74.220556
+          ],
+          "interrupciones": 207
+        }
+      ],
+      "best_cost": 0.044026,
+      "explored_solutions": 2
+    }
+  },
+  "grupo-4": {
+    "groupId": "grupo-4",
+    "groupName": "Grupo 4",
+    "origin": {
+      "id": "eps-eps-sedacusco-s.-a.",
+      "prestador": "EPS SEDACUSCO S. A.",
+      "departamento": "Cusco",
+      "provincia": "Cusco",
+      "distrito": "Cusco",
+      "lat": -13.519167,
+      "lon": -71.976667,
+      "tipo_origen": "sede_referencial",
+      "descripcion": "Origen operativo referencial asociado al prestador"
+    },
+    "dfs": {
+      "startDistrictId": "cusco-cusco-cusco",
+      "order": [
+        {
+          "id": "cusco-cusco-cusco",
+          "nombre": "Cusco",
+          "center": [
+            -13.519167,
+            -71.976667
+          ],
+          "interrupciones": 355
+        },
+        {
+          "id": "cusco-cusco-santiago",
+          "nombre": "Santiago",
+          "center": [
+            -13.525833,
+            -71.983056
+          ],
+          "interrupciones": 92
+        },
+        {
+          "id": "cusco-cusco-wanchaq",
+          "nombre": "Wanchaq",
+          "center": [
+            -13.521389,
+            -71.966667
+          ],
+          "interrupciones": 72
+        },
+        {
+          "id": "cusco-cusco-san-sebastian",
+          "nombre": "San Sebastian",
+          "center": [
+            -13.530278,
+            -71.936944
+          ],
+          "interrupciones": 253
+        }
+      ]
+    },
+    "bfs": {
+      "startDistrictId": "cusco-cusco-cusco",
+      "order": [
+        {
+          "id": "cusco-cusco-cusco",
+          "nombre": "Cusco",
+          "center": [
+            -13.519167,
+            -71.976667
+          ],
+          "interrupciones": 355
+        },
+        {
+          "id": "cusco-cusco-santiago",
+          "nombre": "Santiago",
+          "center": [
+            -13.525833,
+            -71.983056
+          ],
+          "interrupciones": 92
+        },
+        {
+          "id": "cusco-cusco-wanchaq",
+          "nombre": "Wanchaq",
+          "center": [
+            -13.521389,
+            -71.966667
+          ],
+          "interrupciones": 72
+        },
+        {
+          "id": "cusco-cusco-san-sebastian",
+          "nombre": "San Sebastian",
+          "center": [
+            -13.530278,
+            -71.936944
+          ],
+          "interrupciones": 253
+        }
+      ]
+    },
+    "backtracking": {
+      "best_order": [
+        {
+          "id": "cusco-cusco-cusco",
+          "nombre": "Cusco",
+          "center": [
+            -13.519167,
+            -71.976667
+          ],
+          "interrupciones": 355
+        },
+        {
+          "id": "cusco-cusco-santiago",
+          "nombre": "Santiago",
+          "center": [
+            -13.525833,
+            -71.983056
+          ],
+          "interrupciones": 92
+        },
+        {
+          "id": "cusco-cusco-san-sebastian",
+          "nombre": "San Sebastian",
+          "center": [
+            -13.530278,
+            -71.936944
+          ],
+          "interrupciones": 253
+        },
+        {
+          "id": "cusco-cusco-san-jeronimo",
+          "nombre": "San Jeronimo",
+          "center": [
+            -13.544444,
+            -71.883611
+          ],
+          "interrupciones": 89
+        }
+      ],
+      "best_cost": 0.110741,
+      "explored_solutions": 2
+    }
+  },
+  "grupo-5": {
+    "groupId": "grupo-5",
+    "groupName": "Grupo 5",
+    "origin": {
+      "id": "eps-eps-emapat-s.-a.",
+      "prestador": "EPS EMAPAT S. A.",
+      "departamento": "Madre De Dios",
+      "provincia": "Tambopata",
+      "distrito": "Tambopata",
+      "lat": -12.593611,
+      "lon": -69.176667,
+      "tipo_origen": "sede_referencial",
+      "descripcion": "Origen operativo referencial asociado al prestador"
+    },
+    "dfs": {
+      "startDistrictId": "madre-de-dios-tambopata-tambopata",
+      "order": [
+        {
+          "id": "madre-de-dios-tambopata-tambopata",
+          "nombre": "Tambopata",
+          "center": [
+            -12.593611,
+            -69.176667
+          ],
+          "interrupciones": 590
+        }
+      ]
+    },
+    "bfs": {
+      "startDistrictId": "madre-de-dios-tambopata-tambopata",
+      "order": [
+        {
+          "id": "madre-de-dios-tambopata-tambopata",
+          "nombre": "Tambopata",
+          "center": [
+            -12.593611,
+            -69.176667
+          ],
+          "interrupciones": 590
+        }
+      ]
+    },
+    "backtracking": {
+      "best_order": [
+        {
+          "id": "madre-de-dios-tambopata-tambopata",
+          "nombre": "Tambopata",
+          "center": [
+            -12.593611,
+            -69.176667
+          ],
+          "interrupciones": 590
+        }
+      ],
+      "best_cost": 0.0,
+      "explored_solutions": 1
+    }
+  },
+  "grupo-6": {
+    "groupId": "grupo-6",
+    "groupName": "Grupo 6",
+    "origin": {
+      "id": "eps-eps-aguas-de-lima-norte-s.-a.",
+      "prestador": "EPS AGUAS DE LIMA NORTE S. A.",
+      "departamento": "Lima",
+      "provincia": "Huaura",
+      "distrito": "Hualmay",
+      "lat": -11.096667,
+      "lon": -77.613056,
+      "tipo_origen": "sede_referencial",
+      "descripcion": "Origen operativo referencial asociado al prestador"
+    },
+    "dfs": {
+      "startDistrictId": "lima-huaura-huacho",
+      "order": [
+        {
+          "id": "lima-huaura-huacho",
+          "nombre": "Huacho",
+          "center": [
+            -11.108056,
+            -77.610278
+          ],
+          "interrupciones": 315
+        },
+        {
+          "id": "lima-huaura-hualmay",
+          "nombre": "Hualmay",
+          "center": [
+            -11.096667,
+            -77.613056
+          ],
+          "interrupciones": 96
+        },
+        {
+          "id": "lima-huaura-santa-maria",
+          "nombre": "Santa Maria",
+          "center": [
+            -11.096667,
+            -77.595
+          ],
+          "interrupciones": 37
+        },
+        {
+          "id": "lima-huaura-huaura",
+          "nombre": "Huaura",
+          "center": [
+            -11.069722,
+            -77.599167
+          ],
+          "interrupciones": 20
+        }
+      ]
+    },
+    "bfs": {
+      "startDistrictId": "lima-huaura-huacho",
+      "order": [
+        {
+          "id": "lima-huaura-huacho",
+          "nombre": "Huacho",
+          "center": [
+            -11.108056,
+            -77.610278
+          ],
+          "interrupciones": 315
+        },
+        {
+          "id": "lima-huaura-hualmay",
+          "nombre": "Hualmay",
+          "center": [
+            -11.096667,
+            -77.613056
+          ],
+          "interrupciones": 96
+        },
+        {
+          "id": "lima-huaura-santa-maria",
+          "nombre": "Santa Maria",
+          "center": [
+            -11.096667,
+            -77.595
+          ],
+          "interrupciones": 37
+        },
+        {
+          "id": "lima-huaura-huaura",
+          "nombre": "Huaura",
+          "center": [
+            -11.069722,
+            -77.599167
+          ],
+          "interrupciones": 20
+        }
+      ]
+    },
+    "backtracking": {
+      "best_order": [
+        {
+          "id": "lima-huaura-hualmay",
+          "nombre": "Hualmay",
+          "center": [
+            -11.096667,
+            -77.613056
+          ],
+          "interrupciones": 96
+        },
+        {
+          "id": "lima-huaura-huacho",
+          "nombre": "Huacho",
+          "center": [
+            -11.108056,
+            -77.610278
+          ],
+          "interrupciones": 315
+        },
+        {
+          "id": "lima-huaura-santa-maria",
+          "nombre": "Santa Maria",
+          "center": [
+            -11.096667,
+            -77.595
+          ],
+          "interrupciones": 37
+        },
+        {
+          "id": "lima-huaura-vegueta",
+          "nombre": "Vegueta",
+          "center": [
+            -11.023333,
+            -77.643889
+          ],
+          "interrupciones": 85
+        }
+      ],
+      "best_cost": 0.118915,
+      "explored_solutions": 4
+    }
+  },
+  "grupo-7": {
+    "groupId": "grupo-7",
+    "groupName": "Grupo 7",
+    "origin": {
+      "id": "eps-sedalib-s.-a.",
+      "prestador": "SEDALIB S. A.",
+      "departamento": "La Libertad",
+      "provincia": "Trujillo",
+      "distrito": "Trujillo",
+      "lat": -8.1,
+      "lon": -79.030556,
+      "tipo_origen": "sede_referencial",
+      "descripcion": "Origen operativo referencial asociado al prestador"
+    },
+    "dfs": {
+      "startDistrictId": "la-libertad-trujillo-trujillo",
+      "order": [
+        {
+          "id": "la-libertad-trujillo-trujillo",
+          "nombre": "Trujillo",
+          "center": [
+            -8.1,
+            -79.030556
+          ],
+          "interrupciones": 226
+        },
+        {
+          "id": "la-libertad-trujillo-florencia-de-mora",
+          "nombre": "Florencia De Mora",
+          "center": [
+            -8.082778,
+            -79.023333
+          ],
+          "interrupciones": 20
+        },
+        {
+          "id": "la-libertad-trujillo-el-porvenir",
+          "nombre": "El Porvenir",
+          "center": [
+            -8.088056,
+            -78.997778
+          ],
+          "interrupciones": 51
+        },
+        {
+          "id": "la-libertad-trujillo-la-esperanza",
+          "nombre": "La Esperanza",
+          "center": [
+            -8.056111,
+            -79.051667
+          ],
+          "interrupciones": 31
+        },
+        {
+          "id": "la-libertad-trujillo-victor-larco-herrera",
+          "nombre": "Victor Larco Herrera",
+          "center": [
+            -8.136389,
+            -79.043333
+          ],
+          "interrupciones": 31
+        },
+        {
+          "id": "la-libertad-trujillo-moche",
+          "nombre": "Moche",
+          "center": [
+            -8.171389,
+            -79.009167
+          ],
+          "interrupciones": 74
+        },
+        {
+          "id": "la-libertad-trujillo-salaverry",
+          "nombre": "Salaverry",
+          "center": [
+            -8.224444,
+            -78.976111
+          ],
+          "interrupciones": 37
+        }
+      ]
+    },
+    "bfs": {
+      "startDistrictId": "la-libertad-trujillo-trujillo",
+      "order": [
+        {
+          "id": "la-libertad-trujillo-trujillo",
+          "nombre": "Trujillo",
+          "center": [
+            -8.1,
+            -79.030556
+          ],
+          "interrupciones": 226
+        },
+        {
+          "id": "la-libertad-trujillo-florencia-de-mora",
+          "nombre": "Florencia De Mora",
+          "center": [
+            -8.082778,
+            -79.023333
+          ],
+          "interrupciones": 20
+        },
+        {
+          "id": "la-libertad-trujillo-el-porvenir",
+          "nombre": "El Porvenir",
+          "center": [
+            -8.088056,
+            -78.997778
+          ],
+          "interrupciones": 51
+        },
+        {
+          "id": "la-libertad-trujillo-victor-larco-herrera",
+          "nombre": "Victor Larco Herrera",
+          "center": [
+            -8.136389,
+            -79.043333
+          ],
+          "interrupciones": 31
+        },
+        {
+          "id": "la-libertad-trujillo-la-esperanza",
+          "nombre": "La Esperanza",
+          "center": [
+            -8.056111,
+            -79.051667
+          ],
+          "interrupciones": 31
+        },
+        {
+          "id": "la-libertad-trujillo-moche",
+          "nombre": "Moche",
+          "center": [
+            -8.171389,
+            -79.009167
+          ],
+          "interrupciones": 74
+        },
+        {
+          "id": "la-libertad-trujillo-salaverry",
+          "nombre": "Salaverry",
+          "center": [
+            -8.224444,
+            -78.976111
+          ],
+          "interrupciones": 37
+        }
+      ]
+    },
+    "backtracking": {
+      "best_order": [
+        {
+          "id": "la-libertad-trujillo-trujillo",
+          "nombre": "Trujillo",
+          "center": [
+            -8.1,
+            -79.030556
+          ],
+          "interrupciones": 226
+        },
+        {
+          "id": "la-libertad-trujillo-el-porvenir",
+          "nombre": "El Porvenir",
+          "center": [
+            -8.088056,
+            -78.997778
+          ],
+          "interrupciones": 51
+        },
+        {
+          "id": "la-libertad-trujillo-moche",
+          "nombre": "Moche",
+          "center": [
+            -8.171389,
+            -79.009167
+          ],
+          "interrupciones": 74
+        },
+        {
+          "id": "la-libertad-trujillo-salaverry",
+          "nombre": "Salaverry",
+          "center": [
+            -8.224444,
+            -78.976111
+          ],
+          "interrupciones": 37
+        }
+      ],
+      "best_cost": 0.181504,
+      "explored_solutions": 3
+    }
+  }
+}
