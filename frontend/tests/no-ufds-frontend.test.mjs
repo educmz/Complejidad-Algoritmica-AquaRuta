@@ -64,4 +64,9 @@ for (const [file, content] of contents) {
     false,
     `No debe existir una implementacion Backtracking activa en React en ${file}`
   );
+  assert.equal(
+    /function\s+sectorize\s*\(|const\s+sectorize\s*=|recursiveSplit|splitGroup|splitSector|divideGroup/.test(content),
+    false,
+    `No debe existir una implementacion Divide y Venceras de sectorizacion activa en React en ${file}`
+  );
 }

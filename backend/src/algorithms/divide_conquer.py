@@ -1,4 +1,5 @@
 from statistics import mean
+import math
 
 
 def _zone_value(zone, key, default=None):
@@ -39,6 +40,50 @@ def _split_by_geography(zones):
     return ordered[:middle], ordered[middle:]
 
 
+def _split_axis(zones):
+    latitudes = [_zone_center(zone)[0] for zone in zones]
+    longitudes = [_zone_center(zone)[1] for zone in zones]
+    lat_spread = max(latitudes) - min(latitudes) if latitudes else 0
+    lon_spread = max(longitudes) - min(longitudes) if longitudes else 0
+    return "longitude" if lon_spread >= lat_spread else "latitude"
+
+
+def _stable_zone_id(zone):
+    return str(_zone_value(zone, "id", _zone_name(zone)))
+
+
+def _balanced_split(zones, criterion):
+    if criterion == "carga":
+        left, right = _split_by_load(zones)
+        if left and right and len(left) < len(zones) and len(right) < len(zones):
+            return left, right, "load"
+    axis = _split_axis(zones)
+    axis_index = 1 if axis == "longitude" else 0
+    if criterion == "prioridad":
+        ordered = sorted(
+            zones,
+            key=lambda zone: (-float(_zone_value(zone, "prioridad_score", 0) or 0), _stable_zone_id(zone)),
+        )
+        split_by = "priority"
+    elif criterion == "mixto":
+        ordered = sorted(
+            zones,
+            key=lambda zone: (_zone_center(zone)[axis_index], -_operational_load(zone), _stable_zone_id(zone)),
+        )
+        split_by = f"mixed_{axis}"
+    else:
+        ordered = sorted(zones, key=lambda zone: (_zone_center(zone)[axis_index], _stable_zone_id(zone)))
+        split_by = axis
+    middle = len(ordered) // 2
+    left, right = ordered[:middle], ordered[middle:]
+    if not left or not right or len(left) >= len(zones) or len(right) >= len(zones):
+        ordered = sorted(zones, key=_stable_zone_id)
+        middle = max(1, len(ordered) // 2)
+        left, right = ordered[:middle], ordered[middle:]
+        split_by = "stable_index"
+    return left, right, split_by
+
+
 def _operational_load(zone):
     return (
         float(_zone_value(zone, "interrupciones", 0) or 0)
@@ -61,27 +106,6 @@ def _split_by_load(zones):
             right.append(zone)
             right_load += load
     return left, right
-
-
-def _divide_zones(zones, desired_parts, criterion):
-    if desired_parts <= 1 or len(zones) <= 1:
-        return [zones]
-    left_parts = desired_parts // 2
-    right_parts = desired_parts - left_parts
-    if criterion == "carga":
-        left, right = _split_by_load(zones)
-    elif criterion == "mixto":
-        geo_left, geo_right = _split_by_geography(zones)
-        if abs(len(geo_left) - len(geo_right)) > 1:
-            left, right = _split_by_load(zones)
-        else:
-            left, right = geo_left, geo_right
-    else:
-        left, right = _split_by_geography(zones)
-    if not left or not right:
-        middle = max(1, len(zones) // 2)
-        left, right = zones[:middle], zones[middle:]
-    return _divide_zones(left, left_parts, criterion) + _divide_zones(right, right_parts, criterion)
 
 
 def _aggregate(part):
@@ -108,7 +132,14 @@ def sectorizar_divide_conquer(zones, sector_count=4, criterion="geografico"):
     if not zones:
         return []
     sector_count = max(1, min(int(sector_count), len(zones)))
-    parts = _divide_zones(zones, sector_count, criterion)
+    max_sector_size = max(1, math.ceil(len(zones) / sector_count))
+    result = sectorize_divide_and_conquer(
+        zones,
+        max_sector_size=max_sector_size,
+        split_criterion=criterion,
+        max_depth=10,
+    )
+    parts = [sector["nodes"] for sector in result["sectors"]]
     sectors = []
     for index, part in enumerate(parts, start=1):
         interruptions = sum(int(_zone_value(zone, "interrupciones", 0)) for zone in part)
@@ -136,3 +167,104 @@ def sectorizar_divide_conquer(zones, sector_count=4, criterion="geografico"):
         sector["id"] = f"sector-{index}"
         sector["nombre"] = f"Sector {index}"
     return sectors
+
+
+def sectorize_divide_and_conquer(
+    nodes,
+    max_sector_size=8,
+    split_criterion="geografico",
+    max_depth=10,
+):
+    nodes = [node for node in nodes if node is not None]
+    if not nodes:
+        raise ValueError("No hay nodos para sectorizar.")
+    ids = [_stable_zone_id(node) for node in nodes]
+    if len(ids) != len(set(ids)):
+        raise ValueError("La lista de nodos contiene ids duplicados.")
+    max_sector_size = int(max_sector_size)
+    max_depth = int(max_depth)
+    if max_sector_size < 1:
+        raise ValueError("max_sector_size debe ser mayor que cero.")
+    if max_depth < 0:
+        raise ValueError("max_depth no puede ser negativo.")
+    if split_criterion not in {"geografico", "carga", "mixto", "prioridad"}:
+        raise ValueError("Criterio de sectorizacion no permitido.")
+
+    metrics = {
+        "recursive_calls": 0,
+        "split_count": 0,
+        "base_case_count": 0,
+        "max_depth_reached": 0,
+        "input_nodes": len(nodes),
+        "output_sectors": 0,
+    }
+    warnings = []
+    split_trace = []
+
+    def base_sector(part, depth, reason):
+        metrics["base_case_count"] += 1
+        metrics["max_depth_reached"] = max(metrics["max_depth_reached"], depth)
+        if reason == "MAX_DEPTH_REACHED" and len(part) > max_sector_size:
+            warnings.append(
+                {
+                    "code": "MAX_DEPTH_REACHED",
+                    "size": len(part),
+                    "maxSectorSize": max_sector_size,
+                    "depth": depth,
+                }
+            )
+        return [
+            {
+                "nodes": sorted(part, key=_stable_zone_id),
+                "depth": depth,
+                "base_case": reason,
+            }
+        ]
+
+    def solve(part, depth):
+        metrics["recursive_calls"] += 1
+        metrics["max_depth_reached"] = max(metrics["max_depth_reached"], depth)
+        part = sorted(part, key=_stable_zone_id)
+        if not part:
+            return []
+        if len(part) <= max_sector_size:
+            return base_sector(part, depth, "MAX_SIZE_REACHED")
+        if depth >= max_depth:
+            return base_sector(part, depth, "MAX_DEPTH_REACHED")
+
+        left, right, split_by = _balanced_split(part, split_criterion)
+        if not left or not right or len(left) >= len(part) or len(right) >= len(part):
+            ordered = sorted(part, key=_stable_zone_id)
+            middle = max(1, len(ordered) // 2)
+            left, right = ordered[:middle], ordered[middle:]
+            split_by = "stable_index"
+        if not left or not right:
+            return base_sector(part, depth, "NON_REDUCING_SPLIT")
+
+        metrics["split_count"] += 1
+        split_trace.append(
+            {
+                "depth": depth,
+                "criterion": split_criterion,
+                "splitBy": split_by,
+                "leftSize": len(left),
+                "rightSize": len(right),
+            }
+        )
+        left_sectors = solve(left, depth + 1)
+        right_sectors = solve(right, depth + 1)
+        return left_sectors + right_sectors
+
+    sectors = solve(nodes, 0)
+    metrics["output_sectors"] = len(sectors)
+    sizes = [len(sector["nodes"]) for sector in sectors]
+    metrics["largest_sector_size"] = max(sizes) if sizes else 0
+    metrics["smallest_sector_size"] = min(sizes) if sizes else 0
+    metrics["average_sector_size"] = round(sum(sizes) / len(sizes), 4) if sizes else 0
+    metrics["estimated_complexity"] = "O(n log n) aproximado para divisiones equilibradas con ordenamiento por nivel"
+    return {
+        "sectors": sectors,
+        "metrics": metrics,
+        "warnings": warnings,
+        "split_trace": split_trace,
+    }

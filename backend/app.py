@@ -28,6 +28,14 @@ from services.backtracking_service import (
 from services.dijkstra_service import DijkstraService, DijkstraServiceError
 from services.graph_traversal_service import GraphTraversalService, GraphTraversalServiceError
 from services.ors_service import ORSService, RouteConfig
+from services.sectorization_service import (
+    DEFAULT_MAX_SECTOR_SIZE,
+    MAX_SECTOR_SIZE_ALLOWED,
+    MAX_SECTORIZATION_DEPTH,
+    SectorizationService,
+    SectorizationServiceError,
+    normalize_split_criterion,
+)
 from services.tsp_service import TspService, TspServiceError, normalize_criterion
 
 app = FastAPI()
@@ -61,6 +69,7 @@ dijkstra_service = DijkstraService(ROOT)
 tsp_service = TspService(ROOT)
 graph_traversal_service = GraphTraversalService(ROOT)
 backtracking_service = BacktrackingService(ROOT)
+sectorization_service = SectorizationService(ROOT)
 
 
 class RouteRequest(BaseModel):
@@ -214,6 +223,28 @@ class BacktrackingRunRequest(BaseModel):
     def validate_backtracking_destination_ids(cls, value):
         if len(value) != len(set(value)):
             raise ValueError("La lista de destinos contiene ids duplicados.")
+        return value
+
+
+class SectorizationRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    groupId: str = Field(min_length=1)
+    nodeIds: List[str] | None = Field(default=None, max_length=500)
+    maxSectorSize: int = Field(DEFAULT_MAX_SECTOR_SIZE, ge=1, le=MAX_SECTOR_SIZE_ALLOWED)
+    splitCriterion: str = Field("geografico")
+    maxDepth: int = Field(MAX_SECTORIZATION_DEPTH, ge=0, le=MAX_SECTORIZATION_DEPTH)
+
+    @field_validator("splitCriterion")
+    @classmethod
+    def validate_split_criterion(cls, value):
+        return normalize_split_criterion(value)
+
+    @field_validator("nodeIds")
+    @classmethod
+    def validate_sectorization_node_ids(cls, value):
+        if value is not None and len(value) != len(set(value)):
+            raise ValueError("La lista de nodos contiene ids duplicados.")
         return value
 
 
@@ -550,6 +581,26 @@ def run_local_backtracking(payload: BacktrackingRunRequest):
         raise HTTPException(
             status_code=500,
             detail="No se pudo evaluar la secuencia.",
+        ) from exc
+
+
+@app.post("/sectorization/run")
+def run_sectorization(payload: SectorizationRunRequest):
+    try:
+        return sectorization_service.run(
+            group_id=payload.groupId,
+            node_ids=payload.nodeIds,
+            max_sector_size=payload.maxSectorSize,
+            split_criterion=payload.splitCriterion,
+            max_depth=payload.maxDepth,
+        )
+    except SectorizationServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar sectorizacion: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo sectorizar el grupo.",
         ) from exc
 
 
