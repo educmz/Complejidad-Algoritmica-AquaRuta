@@ -3,12 +3,16 @@ export const REQUEST_TIMEOUT_MS = 20000;
 
 function withTimeout(signal, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  let didTimeout = false;
+  const timeoutId = window.setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, timeoutMs);
   if (signal) {
     if (signal.aborted) controller.abort();
     signal.addEventListener("abort", () => controller.abort(), { once: true });
   }
-  return { signal: controller.signal, timeoutId };
+  return { signal: controller.signal, timeoutId, didTimeout: () => didTimeout };
 }
 
 async function readJson(response, invalidMessage) {
@@ -37,7 +41,7 @@ export async function apiRequest(path, options = {}) {
     signal: sourceSignal,
     timeoutMs,
   } = options;
-  const { signal, timeoutId } = withTimeout(sourceSignal, timeoutMs);
+  const { signal, timeoutId, didTimeout } = withTimeout(sourceSignal, timeoutMs);
   let response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -50,7 +54,14 @@ export async function apiRequest(path, options = {}) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (error) {
-    if (error?.name === "AbortError") throw error;
+    if (error?.name === "AbortError") {
+      if (didTimeout() && !sourceSignal?.aborted) {
+        const timeoutError = new Error("El backend no respondio dentro del tiempo esperado. Verifica que el servidor este iniciado.");
+        timeoutError.name = "TimeoutError";
+        throw timeoutError;
+      }
+      throw error;
+    }
     throw new Error("El servidor no respondio. Revisa que el backend este en ejecucion.", {
       cause: error,
     });

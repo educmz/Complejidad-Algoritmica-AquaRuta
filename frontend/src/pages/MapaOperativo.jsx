@@ -516,6 +516,9 @@ export default function MapaOperativo() {
   const [highlightedRouteId, setHighlightedRouteId] = useState("");
   const [selectedInfoRouteId, setSelectedInfoRouteId] = useState("");
   const [mapView, setMapView] = useState("road");
+  const routeRequestSeqRef = useRef(0);
+  const routeAbortControllerRef = useRef(null);
+  const routeLoadingRef = useRef(false);
 
   const selectedGroup =
     groupOptions.find((group) => group.groupId === selectedGroupId) || null;
@@ -664,11 +667,18 @@ export default function MapaOperativo() {
         [selectedDestination.center[1], selectedDestination.center[0]],
       ]
     : null;
-  function clearSelection() {
-    setSelectedGroupId("");
-    setSelectedSectorKey("");
-    setSelectedDistrictId("");
-    setCriterion("distancia");
+
+  useEffect(() => {
+    return () => {
+      routeAbortControllerRef.current?.abort();
+    };
+  }, []);
+
+  function resetRouteState() {
+    routeAbortControllerRef.current?.abort();
+    routeRequestSeqRef.current += 1;
+    routeLoadingRef.current = false;
+    setRouteLoading(false);
     setRouteResults([]);
     setRouteResultsKey("");
     setRouteError("");
@@ -677,9 +687,25 @@ export default function MapaOperativo() {
     setSelectedInfoRouteId("");
   }
 
+  function clearSelection() {
+    setSelectedGroupId("");
+    setSelectedSectorKey("");
+    setSelectedDistrictId("");
+    setCriterion("distancia");
+    resetRouteState();
+  }
+
   async function loadSelectedRoute() {
     if (!selectionComplete || !selectedRouteCoordinates) return;
+    if (routeLoadingRef.current) return;
 
+    routeAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    routeAbortControllerRef.current = controller;
+    const requestSeq = routeRequestSeqRef.current + 1;
+    routeRequestSeqRef.current = requestSeq;
+    routeLoadingRef.current = true;
+    const requestKey = routeRequestKey;
     setRouteLoading(true);
     setRouteError("");
     setRouteResults([]);
@@ -711,7 +737,8 @@ export default function MapaOperativo() {
         });
       }
 
-      const payload = await fetchRouteGeoJsonBatch(routeRequests);
+      const payload = await fetchRouteGeoJsonBatch(routeRequests, { signal: controller.signal });
+      if (routeRequestSeqRef.current !== requestSeq || controller.signal.aborted) return;
       const routes = (payload.routes || [])
         .map(routeGeoJsonFromBatchItem)
         .filter(Boolean)
@@ -736,16 +763,21 @@ export default function MapaOperativo() {
         throw new Error("OpenRouteService no devolvió rutas por calles para este destino.");
       }
       setRouteResults(routes);
-      setRouteResultsKey(routeRequestKey);
+      setRouteResultsKey(requestKey);
       setRouteErrorKey("");
       setSelectedInfoRouteId("");
     } catch (error) {
+      if (error?.name === "AbortError") return;
+      if (routeRequestSeqRef.current !== requestSeq) return;
       setRouteError(error.message || "No se pudo calcular la ruta real.");
-      setRouteErrorKey(routeRequestKey);
+      setRouteErrorKey(requestKey);
       setRouteResults([]);
       setRouteResultsKey("");
     } finally {
-      setRouteLoading(false);
+      if (routeRequestSeqRef.current === requestSeq) {
+        routeLoadingRef.current = false;
+        setRouteLoading(false);
+      }
     }
   }
 
@@ -783,11 +815,7 @@ export default function MapaOperativo() {
                       setSelectedGroupId(event.target.value);
                       setSelectedSectorKey("");
                       setSelectedDistrictId("");
-                      setRouteResults([]);
-                      setRouteResultsKey("");
-                      setRouteError("");
-                      setRouteErrorKey("");
-                      setSelectedInfoRouteId("");
+                      resetRouteState();
                     }}
                   >
                     <option value="">Seleccionar grupo</option>
@@ -808,9 +836,7 @@ export default function MapaOperativo() {
                     onChange={(event) => {
                       setSelectedSectorKey(event.target.value);
                       setSelectedDistrictId("");
-                      setRouteResults([]);
-                      setRouteResultsKey("");
-                      setSelectedInfoRouteId("");
+                      resetRouteState();
                     }}
                   >
                     <option value="">Seleccionar sector</option>
@@ -830,9 +856,7 @@ export default function MapaOperativo() {
                     disabled={routeLoading || !selectedSector}
                     onChange={(event) => {
                       setSelectedDistrictId(event.target.value);
-                      setRouteResults([]);
-                      setRouteResultsKey("");
-                      setSelectedInfoRouteId("");
+                      resetRouteState();
                     }}
                   >
                     <option value="">Seleccionar zona</option>

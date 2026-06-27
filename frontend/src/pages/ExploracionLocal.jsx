@@ -42,9 +42,9 @@ function formatNumber(value, digits = 2) {
 
 function formatWeight(value, criterion) {
   if (!Number.isFinite(value)) return "No disponible";
-  if (criterion === "tiempo") return `${formatNumber(value * 60, 1)} min`;
-  if (criterion === "costo") return `S/ ${formatNumber(value * 120, 2)}`;
-  return `${formatNumber(value * 111.32, 1)} km aprox.`;
+  if (criterion === "tiempo") return `${formatNumber(value, 1)} min`;
+  if (criterion === "costo") return `S/ ${formatNumber(value, 2)}`;
+  return `${formatNumber(value, 1)} km`;
 }
 
 function formatDijkstraWeight(value, criterion) {
@@ -690,6 +690,7 @@ export default function ExploracionLocal() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     if (mapView !== "road" || !roadRouteCoordinates) return undefined;
     if (roadRouteKey === currentRoadRouteKey && (roadRouteGeoJson || roadRouteError)) {
       return undefined;
@@ -701,13 +702,14 @@ export default function ExploracionLocal() {
       setRoadRouteError("");
       setRoadRouteGeoJson(null);
     });
-    fetchRouteGeoJson(roadRouteCoordinates)
+    fetchRouteGeoJson(roadRouteCoordinates, { signal: controller.signal })
       .then((payload) => {
         if (cancelled) return;
         setRoadRouteGeoJson(payload);
         setRoadRouteKey(currentRoadRouteKey);
       })
       .catch((error) => {
+        if (error?.name === "AbortError") return;
         if (cancelled) return;
         setRoadRouteGeoJson(null);
         setRoadRouteKey(currentRoadRouteKey);
@@ -721,6 +723,7 @@ export default function ExploracionLocal() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [currentRoadRouteKey, mapView, roadRouteCoordinates, roadRouteError, roadRouteGeoJson, roadRouteKey]);
 

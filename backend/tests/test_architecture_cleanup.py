@@ -3,6 +3,7 @@ import importlib.util
 import sys
 import unittest
 from unittest.mock import Mock, patch
+from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "backend" / "src"
@@ -51,6 +52,33 @@ class ArchitectureCleanupTests(unittest.TestCase):
             ("/dashboard", "GET"),
         }
         self.assertTrue(expected.issubset(routes))
+
+    def test_dashboard_endpoint_returns_minimum_contract(self):
+        backend_app = load_backend_app()
+
+        payload = backend_app.get_dashboard()
+
+        self.assertIn("metadata", payload)
+        self.assertIsInstance(payload.get("districts"), list)
+        self.assertIsInstance(payload.get("groupedZones"), list)
+        self.assertIsInstance(payload.get("epsOrigins"), list)
+        self.assertIsInstance(payload.get("operationalRoutes"), dict)
+
+    def test_route_endpoint_rejects_invalid_coordinates_before_ors(self):
+        backend_app = load_backend_app()
+
+        with self.assertRaises(HTTPException) as ctx:
+            backend_app.get_route_safe(backend_app.RouteRequest(coordinates=[[-77.0, -12.0]]))
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("coordenadas", ctx.exception.detail.lower())
+
+    def test_routes_batch_rejects_empty_batch(self):
+        backend_app = load_backend_app()
+
+        with self.assertRaises(HTTPException) as ctx:
+            backend_app.get_routes_batch(backend_app.RouteBatchRequest(routes=[]))
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("ruta", ctx.exception.detail.lower())
 
     def test_centralized_constants_preserve_current_values(self):
         self.assertEqual(MAX_TSP_EXACT_NODES, 12)

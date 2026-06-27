@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
 import DashboardMiniMap from "../components/dashboard/DashboardMiniMap";
 import { aquaRutaData } from "../data/aquaRutaData";
+import { fetchDashboard } from "../services/dashboardApi";
 
 const priorityLabels = {
   critica: "CRÍTICA",
@@ -145,11 +146,23 @@ function districtRankScore(district, maxConnections) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const metadata = useMemo(() => aquaRutaData.metadata || {}, []);
-  const allDistricts = useMemo(() => aquaRutaData.districts || [], []);
-  const groupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
-  const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
-  const operationalRoutes = useMemo(() => aquaRutaData.operationalRoutes || {}, []);
+  const sourceDistricts = useMemo(() => aquaRutaData.districts || [], []);
+  const sourceGroupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
+  const sourceEpsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
+  const fallbackDashboardData = useMemo(
+    () => ({
+      metadata: aquaRutaData.metadata || {},
+      districts: sourceDistricts,
+      groupedZones: sourceGroupedZones,
+      epsOrigins: sourceEpsOrigins,
+      operationalRoutes: aquaRutaData.operationalRoutes || {},
+    }),
+    [sourceDistricts, sourceEpsOrigins, sourceGroupedZones]
+  );
+  const [dashboardData, setDashboardData] = useState(fallbackDashboardData);
+  const [dashboardStatus, setDashboardStatus] = useState("idle");
+  const [dashboardError, setDashboardError] = useState("");
+  const [dashboardRetryToken, setDashboardRetryToken] = useState(0);
 
   const [epsFilter, setEpsFilter] = useState("todos");
   const [departmentFilter, setDepartmentFilter] = useState("todos");
@@ -157,30 +170,78 @@ export default function Dashboard() {
   const [districtFilter, setDistrictFilter] = useState("todos");
   const [groupFilter, setGroupFilter] = useState("todos");
 
+  const dashboardFilters = useMemo(
+    () => ({
+      eps: epsFilter,
+      departamento: departmentFilter,
+      provincia: provinceFilter,
+      distrito: districtFilter,
+      grupo: groupFilter,
+    }),
+    [departmentFilter, districtFilter, epsFilter, groupFilter, provinceFilter]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => {
+      setDashboardStatus("loading");
+      setDashboardError("");
+    }, 0);
+
+    fetchDashboard(dashboardFilters, { signal: controller.signal })
+      .then((payload) => {
+        setDashboardData({
+          metadata: payload.metadata || {},
+          districts: payload.districts || [],
+          groupedZones: payload.groupedZones || [],
+          epsOrigins: payload.epsOrigins || [],
+          operationalRoutes: payload.operationalRoutes || {},
+        });
+        setDashboardStatus((payload.districts || []).length ? "success" : "empty");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setDashboardData(fallbackDashboardData);
+        setDashboardStatus("error");
+        setDashboardError(error?.message || "No se pudieron cargar los indicadores del dashboard.");
+      });
+
+    return () => {
+      window.clearTimeout(loadingTimer);
+      controller.abort();
+    };
+  }, [dashboardFilters, dashboardRetryToken, fallbackDashboardData]);
+
+  const metadata = dashboardData.metadata || {};
+  const allDistricts = useMemo(() => dashboardData.districts || [], [dashboardData]);
+  const groupedZones = useMemo(() => dashboardData.groupedZones || [], [dashboardData]);
+  const epsOrigins = useMemo(() => dashboardData.epsOrigins || [], [dashboardData]);
+  const operationalRoutes = useMemo(() => dashboardData.operationalRoutes || {}, [dashboardData]);
+
   const districtMap = useMemo(
     () => new Map(allDistricts.map((district) => [district.id, district])),
     [allDistricts]
   );
 
   const groupMap = useMemo(
-    () => new Map(groupedZones.map((group) => [group.id, group])),
-    [groupedZones]
+    () => new Map(sourceGroupedZones.map((group) => [group.id, group])),
+    [sourceGroupedZones]
   );
 
   const selectedGroup = groupFilter === "todos" ? null : groupMap.get(groupFilter);
 
   const epsOptions = useMemo(() => {
-    return [...new Set(allDistricts.map((item) => item.eps_principal).filter(Boolean))].sort();
-  }, [allDistricts]);
+    return [...new Set(sourceDistricts.map((item) => item.eps_principal).filter(Boolean))].sort();
+  }, [sourceDistricts]);
 
   const departmentOptions = useMemo(() => {
-    return [...new Set(allDistricts.map((item) => item.departamento).filter(Boolean))].sort();
-  }, [allDistricts]);
+    return [...new Set(sourceDistricts.map((item) => item.departamento).filter(Boolean))].sort();
+  }, [sourceDistricts]);
 
   const provinceOptions = useMemo(() => {
     return [
       ...new Set(
-        allDistricts
+        sourceDistricts
           .filter(
             (item) =>
               departmentFilter === "todos" || item.departamento === departmentFilter
@@ -189,14 +250,35 @@ export default function Dashboard() {
           .filter(Boolean)
       ),
     ].sort();
-  }, [allDistricts, departmentFilter]);
+  }, [departmentFilter, sourceDistricts]);
 
   const districtOptions = useMemo(() => {
-    return allDistricts
+    return sourceDistricts
       .filter((item) => departmentFilter === "todos" || item.departamento === departmentFilter)
       .filter((item) => provinceFilter === "todos" || item.provincia === provinceFilter)
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [allDistricts, departmentFilter, provinceFilter]);
+  }, [departmentFilter, provinceFilter, sourceDistricts]);
+
+  useEffect(() => {
+    if (provinceFilter !== "todos" && !provinceOptions.includes(provinceFilter)) {
+      const timer = window.setTimeout(() => {
+        setProvinceFilter("todos");
+        setDistrictFilter("todos");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [provinceFilter, provinceOptions]);
+
+  useEffect(() => {
+    if (districtFilter !== "todos" && !districtOptions.some((district) => district.id === districtFilter)) {
+      const timer = window.setTimeout(() => {
+        setDistrictFilter("todos");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [districtFilter, districtOptions]);
 
   const selectedGroupIds = useMemo(
     () => new Set(selectedGroup?.zona_ids || []),
@@ -667,7 +749,7 @@ export default function Dashboard() {
                 onChange={(event) => setGroupFilter(event.target.value)}
               >
                 <option value="todos">Todos</option>
-                {groupedZones.map((group) => (
+                {sourceGroupedZones.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.nombre}
                   </option>
@@ -676,6 +758,22 @@ export default function Dashboard() {
             </label>
 
           </div>
+          {dashboardStatus === "loading" && (
+            <div className="local-route-status">Cargando indicadores del dashboard...</div>
+          )}
+          {dashboardStatus === "empty" && (
+            <div className="local-route-status">
+              No hay datos disponibles para los filtros seleccionados.
+            </div>
+          )}
+          {dashboardStatus === "error" && (
+            <div className="local-route-status error">
+              <span>{dashboardError}</span>
+              <button type="button" onClick={() => setDashboardRetryToken((current) => current + 1)}>
+                Reintentar
+              </button>
+            </div>
+          )}
         </article>
 
         <section className="dashboard-kpi-grid">

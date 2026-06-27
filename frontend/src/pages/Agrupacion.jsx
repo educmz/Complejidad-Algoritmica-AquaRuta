@@ -720,6 +720,7 @@ export default function Agrupacion() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     async function loadCoverageRoutes() {
       if (!routeRequestKey || !routePlan?.subroutes?.length) {
@@ -736,7 +737,9 @@ export default function Agrupacion() {
       setFailedSubrouteIds([]);
 
       const results = await Promise.allSettled(
-        routePlan.subroutes.map((subroute) => fetchRouteGeoJson(subroute.coordinates))
+        routePlan.subroutes.map((subroute) =>
+          fetchRouteGeoJson(subroute.coordinates, { signal: controller.signal })
+        )
       );
 
       if (cancelled) return;
@@ -755,7 +758,6 @@ export default function Agrupacion() {
             summary: summaryFromGeoJson(result.value),
           });
         } else {
-          console.error(result.reason);
           failed.push(subroute.id);
         }
       });
@@ -773,6 +775,7 @@ export default function Agrupacion() {
     loadCoverageRoutes();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [routePlan, routeRequestKey]);
 
