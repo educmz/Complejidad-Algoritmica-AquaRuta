@@ -59,4 +59,9 @@ for (const [file, content] of contents) {
     false,
     `No debe existir una implementacion BFS/DFS activa en React en ${file}`
   );
+  assert.equal(
+    /function\s+backtrack\s*\(|const\s+backtrack\s*=|permutations?|path\.pop\s*\(|visited\.delete\s*\(|bestPath/.test(content),
+    false,
+    `No debe existir una implementacion Backtracking activa en React en ${file}`
+  );
 }

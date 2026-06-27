@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
 import AquaMap from "../components/map/AquaMap";
 import { aquaRutaData } from "../data/aquaRutaData";
+import { runBacktrackingExploration } from "../services/backtrackingApi";
 import { runDijkstraExploration } from "../services/dijkstraApi";
 import { fetchRouteGeoJson } from "../services/mapApi";
 import { runTspExploration } from "../services/tspApi";
@@ -190,6 +191,16 @@ export default function ExploracionLocal() {
   const [traversalError, setTraversalError] = useState("");
   const [traversalPayload, setTraversalPayload] = useState(null);
   const [traversalRetryToken, setTraversalRetryToken] = useState(0);
+  const [backtrackingStatus, setBacktrackingStatus] = useState("idle");
+  const [backtrackingError, setBacktrackingError] = useState("");
+  const [backtrackingPayload, setBacktrackingPayload] = useState(null);
+  const [backtrackingRetryToken, setBacktrackingRetryToken] = useState(0);
+  const [backtrackingConstraints, setBacktrackingConstraints] = useState({
+    maxVisits: 4,
+    maxDistanceKm: 250,
+    maxDurationMin: 480,
+    maxOperationalCost: 1500,
+  });
 
   const selectedGroup =
     groupOptions.find((group) => group.groupId === selectedGroupId) || groupOptions[0] || null;
@@ -352,6 +363,25 @@ export default function ExploracionLocal() {
     })),
     [traversalPayload]
   );
+  const backtrackingOrderMap = useMemo(
+    () =>
+      new Map((backtrackingPayload?.sequence || []).map((item) => [item.nodeId, item.order])),
+    [backtrackingPayload]
+  );
+  const backtrackingUnvisitedIds = useMemo(
+    () => new Set((backtrackingPayload?.unvisitedDestinations || []).map((node) => node.id)),
+    [backtrackingPayload]
+  );
+  const backtrackingEdges = useMemo(
+    () => (backtrackingPayload?.edges || []).map((edge, index) => ({
+      source: edge.source,
+      target: edge.target,
+      weight: edge.operationalCost,
+      weightLabel: `#${index + 1}`,
+      isSelected: true,
+    })),
+    [backtrackingPayload]
+  );
   const visibleEdges =
     mapView === "network"
       ? [...sectorBaseEdges, ...sequenceEdges]
@@ -359,6 +389,8 @@ export default function ExploracionLocal() {
       ? dijkstraEdges
       : mapView === "traversal"
       ? traversalEdges
+      : mapView === "backtracking"
+      ? backtrackingEdges
       : [];
   const highlightedPathEdges =
     mapView === "network"
@@ -367,8 +399,10 @@ export default function ExploracionLocal() {
       ? dijkstraEdges
       : mapView === "traversal"
       ? traversalEdges
+      : mapView === "backtracking"
+      ? backtrackingEdges
       : [];
-  const districtPoints = mapView === "network" || mapView === "dijkstra" || mapView === "traversal"
+  const districtPoints = mapView === "network" || mapView === "dijkstra" || mapView === "traversal" || mapView === "backtracking"
     ? [
         ...(originNode ? [originNode] : []),
         ...sectorDistricts.map((node) => ({
@@ -376,14 +410,22 @@ export default function ExploracionLocal() {
           isActiveNode: !disabledNodeIds.has(node.id),
           isExcluded:
             disabledNodeIds.has(node.id) ||
-            (mapView === "traversal" && traversalUnreachableIds.has(node.id)),
+            (mapView === "traversal" && traversalUnreachableIds.has(node.id)) ||
+            (mapView === "backtracking" && backtrackingUnvisitedIds.has(node.id)),
           isGoal:
             mapView === "dijkstra"
               ? node.id === selectedTarget?.id
               : mapView === "traversal"
               ? node.id === selectedTraversalOrigin?.id
+              : mapView === "backtracking"
+              ? false
               : false,
-          mapOrder: mapView === "traversal" ? traversalOrderMap.get(node.id) || null : orderMap.get(node.id) || null,
+          mapOrder:
+            mapView === "traversal"
+              ? traversalOrderMap.get(node.id) || null
+              : mapView === "backtracking"
+              ? backtrackingOrderMap.get(node.id) || null
+              : orderMap.get(node.id) || null,
         })),
       ]
     : [];
@@ -399,6 +441,8 @@ export default function ExploracionLocal() {
       ? "Camino minimo"
       : mapView === "traversal"
       ? "Recorrido logico"
+      : mapView === "backtracking"
+      ? "Backtracking"
       : "Red local";
   const roadRouteCoordinates = useMemo(
     () =>
@@ -428,6 +472,16 @@ export default function ExploracionLocal() {
       maxNeighbors: 4,
     }),
     [activeSectorNodes, selectedTraversalOrigin?.id, traversalAlgorithm]
+  );
+  const backtrackingRequest = useMemo(
+    () => ({
+      originId: selectedOrigin?.id || "",
+      destinationIds: activeSectorNodes.map((node) => node.id),
+      criterion,
+      constraints: backtrackingConstraints,
+      maxExactNodes: 10,
+    }),
+    [activeSectorNodes, backtrackingConstraints, criterion, selectedOrigin?.id]
   );
 
   useEffect(() => {
@@ -585,6 +639,56 @@ export default function ExploracionLocal() {
   }, [mapView, traversalRequest, traversalRetryToken]);
 
   useEffect(() => {
+    if (mapView !== "backtracking") return undefined;
+    if (!backtrackingRequest.originId) {
+      const timer = window.setTimeout(() => {
+        setBacktrackingStatus("idle");
+        setBacktrackingPayload(null);
+        setBacktrackingError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    if (!backtrackingRequest.destinationIds.length) {
+      const timer = window.setTimeout(() => {
+        setBacktrackingStatus("empty");
+        setBacktrackingPayload(null);
+        setBacktrackingError("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => {
+      setBacktrackingStatus("loading");
+      setBacktrackingError("");
+    }, 0);
+
+    runBacktrackingExploration(backtrackingRequest, { signal: controller.signal })
+      .then((payload) => {
+        setBacktrackingPayload(payload);
+        setBacktrackingStatus(
+          payload.summary?.usedFallback
+            ? "fallback"
+            : payload.feasible
+            ? "success"
+            : "infeasible"
+        );
+        setBacktrackingError("");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setBacktrackingPayload(null);
+        setBacktrackingStatus("error");
+        setBacktrackingError(error?.message || "No se pudo evaluar la secuencia.");
+      });
+
+    return () => {
+      window.clearTimeout(loadingTimer);
+      controller.abort();
+    };
+  }, [backtrackingRequest, backtrackingRetryToken, mapView]);
+
+  useEffect(() => {
     let cancelled = false;
     if (mapView !== "road" || !roadRouteCoordinates) return undefined;
     if (roadRouteKey === currentRoadRouteKey && (roadRouteGeoJson || roadRouteError)) {
@@ -640,6 +744,17 @@ export default function ExploracionLocal() {
 
   function retryTraversal() {
     setTraversalRetryToken((current) => current + 1);
+  }
+
+  function retryBacktracking() {
+    setBacktrackingRetryToken((current) => current + 1);
+  }
+
+  function updateBacktrackingConstraint(key, value) {
+    setBacktrackingConstraints((current) => ({
+      ...current,
+      [key]: Number(value),
+    }));
   }
 
   return (
@@ -769,6 +884,53 @@ export default function ExploracionLocal() {
                 </select>
               </label>
 
+              <div className="local-summary-grid compact">
+                <label className="control-group">
+                  <span className="control-label">Max. visitas</span>
+                  <input
+                    className="control-input"
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={backtrackingConstraints.maxVisits}
+                    onChange={(event) => updateBacktrackingConstraint("maxVisits", event.target.value)}
+                  />
+                </label>
+                <label className="control-group">
+                  <span className="control-label">Max. km</span>
+                  <input
+                    className="control-input"
+                    type="number"
+                    min="0"
+                    max="2000"
+                    value={backtrackingConstraints.maxDistanceKm}
+                    onChange={(event) => updateBacktrackingConstraint("maxDistanceKm", event.target.value)}
+                  />
+                </label>
+                <label className="control-group">
+                  <span className="control-label">Max. min</span>
+                  <input
+                    className="control-input"
+                    type="number"
+                    min="0"
+                    max="5000"
+                    value={backtrackingConstraints.maxDurationMin}
+                    onChange={(event) => updateBacktrackingConstraint("maxDurationMin", event.target.value)}
+                  />
+                </label>
+                <label className="control-group">
+                  <span className="control-label">Max. costo</span>
+                  <input
+                    className="control-input"
+                    type="number"
+                    min="0"
+                    max="50000"
+                    value={backtrackingConstraints.maxOperationalCost}
+                    onChange={(event) => updateBacktrackingConstraint("maxOperationalCost", event.target.value)}
+                  />
+                </label>
+              </div>
+
               <div className="local-metric-card">
                 <span>Recorrido estimado</span>
                 <strong>{routePoints.length > 1 ? formatWeight(tspResult.totalDistance, criterion) : "Sin secuencia"}</strong>
@@ -868,6 +1030,49 @@ export default function ExploracionLocal() {
                 </div>
               )}
 
+              {mapView === "backtracking" && backtrackingStatus === "idle" && (
+                <div className="local-route-status">
+                  Selecciona un origen y los destinos.
+                </div>
+              )}
+
+              {mapView === "backtracking" && backtrackingStatus === "loading" && (
+                <div className="local-route-status">
+                  Evaluando secuencias factibles...
+                </div>
+              )}
+
+              {mapView === "backtracking" && backtrackingStatus === "empty" && (
+                <div className="local-route-status">
+                  No hay destinos disponibles en el sector seleccionado.
+                </div>
+              )}
+
+              {mapView === "backtracking" && backtrackingStatus === "success" && (
+                <div className="local-route-status">
+                  Se encontro una secuencia operativa.
+                </div>
+              )}
+
+              {mapView === "backtracking" && backtrackingStatus === "infeasible" && (
+                <div className="local-route-status warning">
+                  No se encontro una secuencia que cumpla las restricciones.
+                </div>
+              )}
+
+              {mapView === "backtracking" && backtrackingStatus === "fallback" && (
+                <div className="local-route-status warning">
+                  Se utilizo una aproximacion por el tamano del conjunto.
+                </div>
+              )}
+
+              {mapView === "backtracking" && backtrackingStatus === "error" && (
+                <div className="local-route-status error">
+                  <span>{backtrackingError || "No se pudo evaluar la secuencia."}</span>
+                  <button type="button" onClick={retryBacktracking}>Reintentar</button>
+                </div>
+              )}
+
               <label className="control-group">
                 <span className="control-label">Tipo de visualización</span>
                 <select
@@ -879,6 +1084,7 @@ export default function ExploracionLocal() {
                   <option value="network">Red local</option>
                   <option value="dijkstra">Camino minimo</option>
                   <option value="traversal">Recorrido logico</option>
+                  <option value="backtracking">Backtracking</option>
                 </select>
               </label>
 
@@ -896,11 +1102,11 @@ export default function ExploracionLocal() {
               activeCenter={selectedSectorCenter}
               routePoints={mapView === "road" ? routePoints : mapView === "dijkstra" ? dijkstraRoutePoints : []}
               routeGeoJson={mapView === "road" ? roadRouteGeoJson : null}
-              routeColor={mapView === "dijkstra" ? "#2563eb" : mapView === "traversal" ? "#9333ea" : "#16a34a"}
+              routeColor={mapView === "dijkstra" ? "#2563eb" : mapView === "traversal" ? "#9333ea" : mapView === "backtracking" ? "#b45309" : "#16a34a"}
               showConceptRouteFallback={mapView !== "road"}
               graphEdges={visibleEdges}
-              highlightedPathEdges={mapView === "network" || mapView === "traversal" ? highlightedPathEdges : []}
-              showEdgeWeights={mapView === "network" || mapView === "traversal"}
+              highlightedPathEdges={mapView === "network" || mapView === "traversal" || mapView === "backtracking" ? highlightedPathEdges : []}
+              showEdgeWeights={mapView === "network" || mapView === "traversal" || mapView === "backtracking"}
               edgeWeightLabel={criterionInfo.edgeLabel}
               showDistrictMarkers
               onDistrictClick={toggleNode}
@@ -921,6 +1127,7 @@ export default function ExploracionLocal() {
               {mapView === "network" && <div><i className="edge" /> Conexiones locales</div>}
               {mapView === "network" && <div><i className="weight" /> Valor por tramo</div>}
               {mapView === "traversal" && <div><i className="edge" /> Recorrido sobre conexiones logicas</div>}
+              {mapView === "backtracking" && <div><i className="edge" /> Secuencia logica bajo restricciones</div>}
             </div>
           </div>
 
@@ -968,6 +1175,14 @@ export default function ExploracionLocal() {
                       {traversalPayload?.summary
                         ? `${traversalPayload.summary.visitedNodes}/${traversalPayload.summary.totalNodes}`
                         : "Sin recorrido"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Backtracking</span>
+                    <strong>
+                      {backtrackingPayload?.summary
+                        ? `${backtrackingPayload.summary.visitedDestinations} destino(s)`
+                        : "Sin secuencia"}
                     </strong>
                   </div>
                   <div>
@@ -1029,6 +1244,14 @@ export default function ExploracionLocal() {
                   <div>
                     <span>Aristas de recorrido</span>
                     <strong>{traversalPayload?.summary?.treeEdges || 0}</strong>
+                  </div>
+                  <div>
+                    <span>Podas Backtracking</span>
+                    <strong>{backtrackingPayload?.summary?.prunedBranches || 0}</strong>
+                  </div>
+                  <div>
+                    <span>Retrocesos</span>
+                    <strong>{backtrackingPayload?.summary?.backtracks || 0}</strong>
                   </div>
                 </div>
               </section>
@@ -1092,6 +1315,18 @@ export default function ExploracionLocal() {
               </div>
             )}
 
+            {backtrackingPayload?.metadata && (
+              <div className="local-explanation-card">
+                <strong>Secuencia logica bajo restricciones</strong>
+                <p>
+                  {backtrackingPayload.feasible
+                    ? `Se seleccionaron ${backtrackingPayload.summary.visitedDestinations} destino(s), con ${backtrackingPayload.summary.prunedBranches} poda(s) y ${backtrackingPayload.summary.backtracks} retroceso(s).`
+                    : "No se encontro una secuencia que cumpla las restricciones seleccionadas."}
+                </p>
+                <span>{backtrackingPayload.objective}</span>
+              </div>
+            )}
+
             <p className="territory-context-note">
               La secuencia es una propuesta de apoyo. En sectores grandes puede priorizar zonas
               representativas para mantener el cálculo manejable.
@@ -1117,6 +1352,20 @@ export default function ExploracionLocal() {
                       {traversalPayload.algorithm === "bfs"
                         ? `Nivel ${item.level ?? 0}`
                         : `Profundidad ${item.depth ?? 0}`}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {backtrackingPayload?.sequence?.length > 0 && (
+              <div className="local-route-list">
+                <span>Secuencia Backtracking</span>
+                {backtrackingPayload.sequence.map((item) => (
+                  <button key={item.nodeId} type="button">
+                    <strong>{item.order}. {item.nombre}</strong>
+                    <small>
+                      {formatNumber(item.accumulatedDistanceKm, 1)} km - S/ {formatNumber(item.accumulatedCost, 1)}
                     </small>
                   </button>
                 ))}

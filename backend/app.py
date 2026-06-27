@@ -20,6 +20,11 @@ SRC = Path(__file__).resolve().parent / "src"
 sys.path.insert(0, str(SRC))
 
 from services.grouping_service import GroupingConfigError, GroupingService
+from services.backtracking_service import (
+    BacktrackingService,
+    BacktrackingServiceError,
+    normalize_backtracking_criterion,
+)
 from services.dijkstra_service import DijkstraService, DijkstraServiceError
 from services.graph_traversal_service import GraphTraversalService, GraphTraversalServiceError
 from services.ors_service import ORSService, RouteConfig
@@ -55,6 +60,7 @@ grouping_service = GroupingService(ROOT)
 dijkstra_service = DijkstraService(ROOT)
 tsp_service = TspService(ROOT)
 graph_traversal_service = GraphTraversalService(ROOT)
+backtracking_service = BacktrackingService(ROOT)
 
 
 class RouteRequest(BaseModel):
@@ -177,6 +183,37 @@ class GraphTraversalRequest(BaseModel):
     def validate_traversal_node_ids(cls, value):
         if len(value) != len(set(value)):
             raise ValueError("La lista de nodos contiene ids duplicados.")
+        return value
+
+
+class BacktrackingConstraints(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    maxDistanceKm: float | None = Field(default=None, ge=0, le=2000)
+    maxDurationMin: float | None = Field(default=None, ge=0, le=5000)
+    maxOperationalCost: float | None = Field(default=None, ge=0, le=50000)
+    maxVisits: int | None = Field(default=None, ge=1, le=10)
+
+
+class BacktrackingRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    originId: str = Field(min_length=1)
+    destinationIds: List[str] = Field(default_factory=list, max_length=60)
+    criterion: str = Field("distancia")
+    constraints: BacktrackingConstraints = Field(default_factory=BacktrackingConstraints)
+    maxExactNodes: int = Field(10, ge=1, le=10)
+
+    @field_validator("criterion")
+    @classmethod
+    def validate_backtracking_criterion(cls, value):
+        return normalize_backtracking_criterion(value)
+
+    @field_validator("destinationIds")
+    @classmethod
+    def validate_backtracking_destination_ids(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError("La lista de destinos contiene ids duplicados.")
         return value
 
 
@@ -493,6 +530,26 @@ def run_local_traversal(payload: GraphTraversalRequest):
         raise HTTPException(
             status_code=500,
             detail="No se pudo calcular el recorrido.",
+        ) from exc
+
+
+@app.post("/local-exploration/backtracking")
+def run_local_backtracking(payload: BacktrackingRunRequest):
+    try:
+        return backtracking_service.run(
+            origin_id=payload.originId,
+            destination_ids=payload.destinationIds,
+            criterion=payload.criterion,
+            constraints=payload.constraints.model_dump(),
+            max_exact_nodes=payload.maxExactNodes,
+        )
+    except BacktrackingServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("No se pudo ejecutar Backtracking local: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo evaluar la secuencia.",
         ) from exc
 
 
