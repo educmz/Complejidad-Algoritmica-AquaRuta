@@ -373,6 +373,13 @@ export default function Sectorizacion() {
   const [sectorizationError, setSectorizationError] = useState("");
   const [sectorizationPayload, setSectorizationPayload] = useState(null);
   const [sectorizationRetryToken, setSectorizationRetryToken] = useState(0);
+  const [controlPanelOpen, setControlPanelOpen] = useState(true);
+  const [mapExpanded, setMapExpanded] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
+    return () => window.clearTimeout(timer);
+  }, [controlPanelOpen, mapExpanded]);
 
   const activePrecomputedGroup = sectorizedZones[selectedGroupId] || null;
   const activeOption = groupOptions.find((group) => group.groupId === selectedGroupId) || null;
@@ -567,7 +574,7 @@ export default function Sectorizacion() {
 
   return (
     <MainLayout>
-      <section className="sector-page">
+      <section className={`sector-page workspace-page ${mapExpanded ? "workspace-expanded" : ""} ${controlPanelOpen ? "" : "panel-collapsed"}`}>
         <article className="sector-hero-panel">
           <div>
             <h2>SectorizaciÃ³n</h2>
@@ -591,7 +598,25 @@ export default function Sectorizacion() {
           </div>
         </article>
 
-        <article className="sector-controls-panel">
+        <div className="workspace-toolbar" aria-label="Herramientas de sectorizacion">
+          <button
+            type="button"
+            aria-expanded={controlPanelOpen}
+            aria-controls="sector-control-panel"
+            onClick={() => setControlPanelOpen((current) => !current)}
+          >
+            {controlPanelOpen ? "Ocultar configuracion" : "Mostrar configuracion"}
+          </button>
+          <button
+            type="button"
+            aria-pressed={mapExpanded}
+            onClick={() => setMapExpanded((current) => !current)}
+          >
+            {mapExpanded ? "Salir de mapa ampliado" : "Ampliar mapa"}
+          </button>
+        </div>
+
+        <article id="sector-control-panel" className="sector-controls-panel workspace-side-panel">
           <div className="sector-control-grid">
             <label className="control-group">
               <span className="control-label">Grupo operativo</span>
