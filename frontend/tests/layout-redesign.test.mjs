@@ -39,6 +39,14 @@ assert.ok(sector.includes("sector-map-expanded"), "Sectorizacion debe ampliar so
 assert.equal(sector.includes("workspace-expanded"), false, "Sectorizacion no debe usar el modo global que oculta bloques superiores");
 assert.ok(sector.includes("DEFAULT_GROUP_ID = \"grupo-1\""), "Sectorizacion debe seleccionar Grupo 1 por defecto");
 assert.ok(sector.includes("searchParams.get(\"groupId\")"), "Sectorizacion debe aceptar groupId por navegacion");
+assert.ok(
+  sector.includes("consolidateDashboardDistrictsAndGroups"),
+  "Sectorizacion debe usar la misma consolidacion de distritos y grupos que Dashboard"
+);
+assert.ok(
+  sector.includes("group.zona_ids?.length ?? group.cantidad_zonas ?? 0"),
+  "Sectorizacion debe filtrar grupos por distritos canonicos reales"
+);
 assert.ok(searchableCombobox.includes("aria-expanded"), "Combobox compartido debe exponer expansion accesible");
 assert.ok(searchableCombobox.includes("role=\"combobox\""), "Combobox compartido debe declarar rol combobox");
 assert.ok(searchableCombobox.includes("role=\"listbox\""), "Combobox compartido debe declarar lista desplegable");

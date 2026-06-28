@@ -1,15 +1,14 @@
 import { useEffect } from "react";
 import {
   CircleMarker,
-  Marker,
   MapContainer,
   Popup,
   TileLayer,
   Tooltip,
   useMap,
 } from "react-leaflet";
-import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import EpsMapMarker from "../map/EpsMapMarker";
 
 const priorityColors = {
   critica: { color: "#991b1b", fill: "#dc2626" },
@@ -43,20 +42,6 @@ function MapFocus({ points, focusKey }) {
 
   return null;
 }
-
-const epsIcon = L.divIcon({
-  className: "dashboard-eps-marker",
-  html: '<span class="dashboard-eps-water-icon" aria-hidden="true"></span>',
-  iconSize: [32, 32],
-  iconAnchor: [16, 29],
-});
-
-const epsReferenceIcon = L.divIcon({
-  className: "dashboard-eps-marker dashboard-eps-marker-reference",
-  html: '<span class="dashboard-eps-water-icon" aria-hidden="true"></span>',
-  iconSize: [32, 32],
-  iconAnchor: [16, 29],
-});
 
 function isValidCoordinatePair(point) {
   return (
@@ -161,24 +146,7 @@ export default function DashboardMiniMap({
         })}
 
         {visibleOrigins.map((origin) => (
-          <Marker
-            key={origin.id}
-            position={[Number(origin.lat), Number(origin.lon)]}
-            icon={origin.locationType === "referencial" ? epsReferenceIcon : epsIcon}
-          >
-            <Tooltip direction="top" opacity={0.95}>
-              {origin.prestador}
-            </Tooltip>
-            <Popup>
-              <strong>{origin.prestador}</strong>
-              <br />
-              {origin.distrito}, {origin.provincia}
-              <br />
-              {origin.locationType === "referencial"
-                ? "Ubicacion referencial de la EPS"
-                : "Ubicacion de referencia EPS"}
-            </Popup>
-          </Marker>
+          <EpsMapMarker key={origin.id} origin={origin} />
         ))}
       </MapContainer>
     </div>
