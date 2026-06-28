@@ -5180,15 +5180,55 @@ input:focus-visible {
 }
 
 .route-explorer-map-shell {
+  background: #dbe4ea;
+  overflow: hidden;
+  padding: 0;
   position: relative;
 }
 
+.route-explorer-map-shell .leaflet-container {
+  background: transparent;
+  overflow: hidden;
+}
+
+.route-explorer-map-shell .leaflet-pane,
+.route-explorer-map-shell .leaflet-map-pane,
+.route-explorer-map-shell .leaflet-tile-pane,
+.route-explorer-map-shell .leaflet-overlay-pane,
+.route-explorer-map-shell .leaflet-shadow-pane,
+.route-explorer-map-shell .leaflet-marker-pane,
+.route-explorer-map-shell .leaflet-tooltip-pane,
+.route-explorer-map-shell .leaflet-popup-pane {
+  background: transparent !important;
+  transform-origin: 0 0;
+}
+
+.route-explorer-map-shell .leaflet-container img,
+.route-explorer-map-shell .leaflet-tile,
+.route-explorer-map-shell .leaflet-tile-container img {
+  border: 0 !important;
+  box-shadow: none !important;
+  display: block;
+  image-rendering: auto;
+  max-width: none !important;
+  outline: none !important;
+  padding: 0 !important;
+}
+
+.route-explorer-map-shell .leaflet-tile {
+  filter: none !important;
+  mix-blend-mode: normal !important;
+}
+
 .map-floating-actions {
+  clear: none;
   display: flex;
+  float: none;
   gap: 7px;
+  left: 96px;
   margin: 0 !important;
   position: absolute;
-  right: 12px;
+  right: auto;
   top: 12px;
   z-index: 800;
 }
@@ -5279,7 +5319,10 @@ input:focus-visible {
   }
 
   .map-floating-actions {
-    align-items: flex-end;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    left: 72px;
+    right: 12px;
   }
 }
