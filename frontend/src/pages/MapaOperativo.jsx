@@ -33,7 +33,7 @@ const criterionLabels = {
   distancia: "menor distancia",
   tiempo: "menor tiempo",
   costo: "menor costo",
-  fragilidad: "menor fragilidad",
+  fragilidad: "menor riesgo de bloqueo",
 };
 
 const DEFAULT_SECTOR_CRITERION = "mixto";
@@ -81,6 +81,11 @@ function formatMoney(value) {
 function formatDecimal(value) {
   if (!Number.isFinite(Number(value))) return "No disponible";
   return Number(value).toFixed(3);
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(Number(value))) return "No disponible";
+  return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
 function formatTrafficUpdatedAt(value) {
@@ -393,7 +398,7 @@ function RouteMapController({ routePoints, expanded, onToggleExpanded }) {
         Ajustar rutas
       </button>
       <button
-        className="route-map-action-button"
+        className="route-map-action-button map-expand-button"
         type="button"
         aria-pressed={expanded}
         onClick={(event) => {
@@ -1095,7 +1100,7 @@ export default function MapaOperativo() {
                     <option value="distancia">Menor distancia</option>
                     <option value="tiempo">Menor tiempo estimado</option>
                     <option value="costo">Menor costo estimado</option>
-                    <option value="fragilidad">Menor fragilidad de ruta</option>
+                    <option value="fragilidad">Menor riesgo de bloqueo</option>
                   </select>
                 </label>
 
@@ -1220,16 +1225,16 @@ export default function MapaOperativo() {
                     <small>Valores usados por el modelo para comparar rutas.</small>
                   </header>
                   <dl>
-                    <dt>Penalización de fragilidad</dt>
+                    <dt>Riesgo de bloqueo</dt>
                     <dd>
                       {selectedRoute?.routeType === "road"
-                        ? formatDecimal(selectedRoute?.routeFragilityPenalty)
+                        ? formatPercent(selectedRoute?.routeFragilityPenalty)
                         : "No aplica"}
                     </dd>
-                    <dt>Peso operativo de arista</dt>
+                    <dt>Dificultad de ruta</dt>
                     <dd>
                       {selectedRoute?.routeType === "road"
-                        ? formatDecimal(selectedRoute?.edgeOperationalWeight)
+                        ? formatPercent(selectedRoute?.edgeOperationalWeight)
                         : "No aplica"}
                     </dd>
                   </dl>
@@ -1370,7 +1375,7 @@ export default function MapaOperativo() {
                   </div>
                   <small>{route.via}</small>
                   <em>
-                    {formatKm(route.distanceKm)} / {formatTime(route.timeMin)} / {formatMoney(route.cost)} / Frag. {formatDecimal(route.routeFragilityPenalty)}
+                    {formatKm(route.distanceKm)} / {formatTime(route.timeMin)} / {formatMoney(route.cost)} / Riesgo: {formatPercent(route.routeFragilityPenalty)}
                   </em>
                   {route.traffic?.trafficDelayMin != null && (
                     <small className="route-traffic-summary">
