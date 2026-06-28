@@ -26,6 +26,15 @@ class RouteRequest(BaseModel):
     alternative_routes: dict[str, Any] | None = None
     source: str | None = None
     target: str | None = None
+    viewMode: str = "road"
+
+    @field_validator("viewMode")
+    @classmethod
+    def validate_view_mode(cls, value):
+        normalized = str(value or "road").strip().lower()
+        if normalized not in {"road", "local"}:
+            raise ValueError("Tipo de visualización de ruta no permitido.")
+        return normalized
 
 
 class RouteBatchRequest(BaseModel):
