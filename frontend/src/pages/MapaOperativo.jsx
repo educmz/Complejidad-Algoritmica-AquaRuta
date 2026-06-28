@@ -82,6 +82,21 @@ function formatDecimal(value) {
   return Number(value).toFixed(3);
 }
 
+function formatTrafficUpdatedAt(value) {
+  if (!value) return "No disponible";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No disponible";
+  return new Intl.DateTimeFormat("es-PE", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function trafficSourceLabel(value) {
+  if (value === "aquaruta_estimated") return "Estimación interna AquaRuta";
+  return value || "No disponible";
+}
+
 function summaryDistanceKm(geoJson) {
   const summary = geoJson?.features?.[0]?.properties?.summary;
   if (!summary) return null;
@@ -107,6 +122,38 @@ function routeMetricsFromPayload(payload) {
   return payload?.metrics || payload?.route_metrics || null;
 }
 
+function routeTrafficFromMetrics(route, routeMetrics) {
+  const candidates = [
+    route?.traffic,
+    route?.normalizedRoute?.traffic,
+    route?.routeMetrics?.traffic,
+    routeMetrics?.traffic,
+    routeMetrics,
+  ];
+  const source = candidates.find(
+    (item) =>
+      item &&
+      (Number.isFinite(Number(item.baseDurationMin)) ||
+        Number.isFinite(Number(item.liveDurationMin)) ||
+        Number.isFinite(Number(item.trafficDelayMin)))
+  );
+  if (!source) return null;
+
+  const numberOrNull = (value) =>
+    Number.isFinite(Number(value)) ? Number(value) : null;
+  return {
+    baseDurationMin: numberOrNull(source.baseDurationMin),
+    liveDurationMin: numberOrNull(source.liveDurationMin),
+    trafficDelayMin: numberOrNull(source.trafficDelayMin),
+    trafficFactor: numberOrNull(source.trafficFactor),
+    trafficSource: source.trafficSource || "",
+    trafficMode: source.trafficMode || "",
+    trafficUpdatedAt: source.trafficUpdatedAt || "",
+    trafficIsStale: Boolean(source.trafficIsStale),
+    trafficWarning: source.trafficWarning || "",
+  };
+}
+
 function routeGeoJsonFromBatchItem(item) {
   if (!item) return null;
   if (item.ok === false) return null;
@@ -117,12 +164,15 @@ function splitRouteAlternatives(geoJson, options = {}) {
   const idPrefix = options.idPrefix || "ruta-real";
   const nameOffset = Number(options.nameOffset || 0);
   const via = options.via || "Trazado por calles";
+  const normalizedRoutes = [geoJson?.primaryRoute, ...(geoJson?.alternatives || [])];
   return (geoJson?.features || []).map((feature, index) => ({
     id: `${idPrefix}-${index + 1}`,
     nombre: `Ruta candidata ${nameOffset + index + 1}`,
     via,
     geoJson: featureToCollection(feature, geoJson),
     routeMetrics: routeMetricsFromPayload(geoJson),
+    normalizedRoute: normalizedRoutes[index] || null,
+    traffic: normalizedRoutes[index]?.traffic || null,
     timeFactor: 1,
     costFactor: 1,
     speedKmh: 34,
@@ -610,6 +660,7 @@ export default function MapaOperativo() {
       const distanceKmValue = summaryDistanceKm(geoJson) || 0;
       const timeMin = summaryDurationMin(geoJson);
       const routeMetrics = route.routeMetrics || routeMetricsFromPayload(geoJson) || {};
+      const traffic = routeTrafficFromMetrics(route, routeMetrics);
       const metrics = timeMin
         ? {
             distanceKm: distanceKmValue,
@@ -632,6 +683,7 @@ export default function MapaOperativo() {
           routeMetrics.edgeOperationalWeight ?? routeMetrics.peso_operativo_arista ?? null,
         routeMetricsSource: routeMetrics.source || routeMetrics.route_metrics_source || "",
         routeMetricsCached: Boolean(routeMetrics.cached || routeMetrics.route_metrics_cached),
+        traffic,
       };
     });
     const bestByMetric = {
@@ -1043,6 +1095,57 @@ export default function MapaOperativo() {
               </div>
             )}
 
+            {hasCalculatedRoutes && selectedRoute?.traffic && (
+              <section className="traffic-card" aria-label="Tráfico estimado">
+                <div className="traffic-card-heading">
+                  <h4>Tráfico</h4>
+                  <span className="traffic-badge estimated">Tráfico estimado</span>
+                </div>
+                <div className="traffic-grid">
+                  <div>
+                    <span>Tiempo sin tráfico</span>
+                    <strong>{formatTime(selectedRoute.traffic.baseDurationMin)}</strong>
+                  </div>
+                  <div>
+                    <span>Tiempo estimado con tráfico</span>
+                    <strong>{formatTime(selectedRoute.traffic.liveDurationMin)}</strong>
+                  </div>
+                  <div>
+                    <span>Demora estimada</span>
+                    <strong>{formatTime(selectedRoute.traffic.trafficDelayMin)}</strong>
+                  </div>
+                  <div>
+                    <span>Factor de tráfico</span>
+                    <strong>{formatDecimal(selectedRoute.traffic.trafficFactor)}</strong>
+                  </div>
+                  <div>
+                    <span>Fuente</span>
+                    <strong>{trafficSourceLabel(selectedRoute.traffic.trafficSource)}</strong>
+                  </div>
+                  <div>
+                    <span>Actualización</span>
+                    <strong>
+                      {formatTrafficUpdatedAt(selectedRoute.traffic.trafficUpdatedAt)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Estado</span>
+                    <strong>
+                      {selectedRoute.traffic.trafficIsStale
+                        ? "Estimación desactualizada"
+                        : "Tráfico estimado"}
+                    </strong>
+                  </div>
+                </div>
+                {selectedRoute.traffic.trafficMode === "estimated" && (
+                  <p className="traffic-warning">
+                    {selectedRoute.traffic.trafficWarning ||
+                      "Tráfico estimado por AquaRuta. No corresponde a tráfico vehicular en vivo."}
+                  </p>
+                )}
+              </section>
+            )}
+
             <p className="territory-context-note">
               Las rutas son candidatas de apoyo operativo. Deben validarse con condiciones reales
               de tránsito, disponibilidad de vehículos y restricciones locales.
@@ -1083,6 +1186,11 @@ export default function MapaOperativo() {
                   <em>
                     {formatKm(route.distanceKm)} / {formatTime(route.timeMin)} / {formatMoney(route.cost)} / Frag. {formatDecimal(route.routeFragilityPenalty)}
                   </em>
+                  {route.traffic?.trafficDelayMin != null && (
+                    <small className="route-traffic-summary">
+                      Tráfico estimado: +{route.traffic.trafficDelayMin.toFixed(2)} min
+                    </small>
+                  )}
                 </button>
               ))}
             </div>

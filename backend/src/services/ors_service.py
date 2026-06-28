@@ -19,7 +19,10 @@ from config.operational_constants import (
     DISTANCE_COST_FACTOR,
     ORS_MAX_ALTERNATIVE_ROUTES,
     TIME_COST_FACTOR,
+    TRAFFIC_ESTIMATED_SOURCE,
+    TRAFFIC_MODE_ESTIMATED,
 )
+from services.traffic import TrafficService
 
 logger = logging.getLogger("aquaruta.ors")
 STRATEGY_VERSION = "fragility-v1"
@@ -81,8 +84,9 @@ class RouteConfig:
 
 
 class ORSService:
-    def __init__(self, config: RouteConfig):
+    def __init__(self, config: RouteConfig, traffic_service=None):
         self.config = config
+        self.traffic_service = traffic_service or TrafficService()
         self.config.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._last_request_at = 0.0
@@ -174,7 +178,17 @@ class ORSService:
 
     def _mark_cached(self, response, expired=False):
         copied = dict(response)
+        primary = self._route_with_traffic(copied.get("primaryRoute"))
+        alternatives = [
+            self._route_with_traffic(route)
+            for route in copied.get("alternatives", [])
+        ]
+        copied["primaryRoute"] = primary
+        copied["alternatives"] = alternatives
         metrics = dict(copied.get("metrics", {}))
+        if primary:
+            traffic = dict(primary["traffic"])
+            metrics.update({**traffic, "traffic": traffic})
         metrics.update(
             {
                 "route_metrics_cached": True,
@@ -185,6 +199,14 @@ class ORSService:
             }
         )
         copied["metrics"] = metrics
+        return copied
+
+    def _route_with_traffic(self, route):
+        if not isinstance(route, dict):
+            return route
+        copied = dict(route)
+        if not isinstance(copied.get("traffic"), dict):
+            copied["traffic"] = self._traffic_metrics(copied.get("durationMin", 0))
         return copied
 
     def _rate_limit(self):
@@ -312,12 +334,22 @@ class ORSService:
         summary = feature["properties"]["summary"]
         distance_km = float(summary.get("distance", 0)) / 1000
         duration_min = float(summary.get("duration", 0)) / 60
+        traffic = self._traffic_metrics(duration_min)
         return {
             "geometry": feature.get("geometry"),
             "distanceKm": round(distance_km, 3),
             "durationMin": round(duration_min, 2),
             "operationalCost": calcular_costo_operativo(distance_km, duration_min),
+            "traffic": traffic,
         }
+
+    def _traffic_metrics(self, base_duration_min):
+        service = getattr(self, "traffic_service", None) or TrafficService()
+        try:
+            return service.get_route_metrics(base_duration_min).to_dict()
+        except Exception as exc:
+            logger.warning("estimated_traffic_failed error=%s", exc)
+            return TrafficService().get_route_metrics(0).to_dict()
 
     def _metrics_from_routes(self, primary, alternatives):
         valid_count = 1 + len(alternatives)
@@ -337,6 +369,7 @@ class ORSService:
             + 0.15 * clamp(operational_cost / self.config.max_operational_cost)
             + 0.30 * fragility
         )
+        traffic = dict(primary.get("traffic") or self._traffic_metrics(primary["durationMin"]))
         return {
             "cantidad_rutas_validas": valid_count,
             "cantidad_rutas_alternativas": len(alternatives),
@@ -351,10 +384,27 @@ class ORSService:
             "routeFragilityPenalty": round(fragility, 4),
             "edgeOperationalWeight": round(edge_weight, 4),
             "operationalCost": operational_cost,
+            **traffic,
+            "traffic": traffic,
         }
 
     def _unavailable_response(self, source, target, route_source):
         now = _utc_now().isoformat()
+        warning = (
+            "No hay ruta vial disponible; el tráfico estimado no pudo calcularse "
+            "sobre una duración base."
+        )
+        traffic = {
+            "baseDurationMin": None,
+            "liveDurationMin": None,
+            "trafficDelayMin": None,
+            "trafficFactor": None,
+            "trafficSource": TRAFFIC_ESTIMATED_SOURCE,
+            "trafficMode": TRAFFIC_MODE_ESTIMATED,
+            "trafficUpdatedAt": now,
+            "trafficIsStale": False,
+            "trafficWarning": warning,
+        }
         return {
             "type": "FeatureCollection",
             "features": [],
@@ -379,5 +429,7 @@ class ORSService:
                 "source": route_source,
                 "cached": False,
                 "updatedAt": now,
+                **traffic,
+                "traffic": traffic,
             },
         }

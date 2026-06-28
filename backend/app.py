@@ -34,6 +34,7 @@ from services.graph_traversal_service import GraphTraversalService, GraphTravers
 from services.ors_service import ORSService, RouteConfig
 from services.sectorization_service import SectorizationService, SectorizationServiceError
 from services.tsp_service import TspService, TspServiceError
+from services.traffic import TrafficService
 
 app = FastAPI()
 
@@ -53,7 +54,8 @@ app.add_middleware(
 
 PROCESSED_DIR = ROOT / "data" / "processed"
 logger = logging.getLogger("aquaruta.routes")
-ors_service = ORSService(RouteConfig.from_env(ROOT))
+traffic_service = TrafficService()
+ors_service = ORSService(RouteConfig.from_env(ROOT), traffic_service=traffic_service)
 grouping_service = GroupingService(ROOT)
 dijkstra_service = DijkstraService(ROOT)
 tsp_service = TspService(ROOT)
@@ -204,6 +206,11 @@ def get_routes_batch(payload: RouteBatchRequest):
 @app.get("/")
 def root():
     return {"message": "Backend AquaRuta activo"}
+
+
+@app.get("/traffic/status")
+def get_traffic_status():
+    return traffic_service.status()
 
 
 @app.post("/grouping/run")
