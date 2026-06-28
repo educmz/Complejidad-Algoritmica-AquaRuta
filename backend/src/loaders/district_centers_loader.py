@@ -1,7 +1,7 @@
 from pathlib import Path
 import pandas as pd
 
-from utils.text_utils import normalize_text
+from utils.text_utils import normalize_text, normalize_ubigeo
 
 
 class DistrictCentersLoader:
@@ -37,7 +37,7 @@ class DistrictCentersLoader:
         df = df.dropna(subset=["latitude", "longitude"]).copy()
 
         if "inei" in df.columns:
-            df["ubigeo"] = df["inei"].fillna("").astype(str).str.replace(r"\.0$", "", regex=True).str.zfill(6)
+            df["ubigeo"] = df["inei"].apply(normalize_ubigeo)
         else:
             df["ubigeo"] = ""
 

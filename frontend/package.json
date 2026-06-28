@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node tests/no-ufds-frontend.test.mjs && node tests/api-client.test.mjs && node tests/layout-redesign.test.mjs",
+    "test": "node tests/no-ufds-frontend.test.mjs && node tests/api-client.test.mjs && node tests/layout-redesign.test.mjs && node tests/dashboard-operativo.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

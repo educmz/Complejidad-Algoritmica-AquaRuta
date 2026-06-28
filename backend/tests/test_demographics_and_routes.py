@@ -2,16 +2,100 @@ from pathlib import Path
 from types import SimpleNamespace
 import sys
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "backend" / "src"
 sys.path.insert(0, str(SRC))
 
 from builders.dataset_builder import _apply_demographics
+from builders.dataset_builder import enrich_districts_with_centers
+from loaders.district_centers_loader import DistrictCentersLoader
 from services.ors_service import ORSService, RouteConfig
+from utils.text_utils import normalize_ubigeo
+import pandas as pd
 
 
 class DemandFamilyWeightTests(unittest.TestCase):
+    def test_normalize_ubigeo_keeps_text_shape(self):
+        self.assertEqual(normalize_ubigeo("10101"), "010101")
+        self.assertEqual(normalize_ubigeo(" 150101 "), "150101")
+        self.assertEqual(normalize_ubigeo("150101.0"), "150101")
+        self.assertEqual(normalize_ubigeo(None), "")
+        self.assertEqual(normalize_ubigeo("abc"), "")
+
+    def test_district_centers_loader_normalizes_ubigeo_and_coordinates(self):
+        source = pd.DataFrame(
+            {
+                "inei": ["010101.0", " 150101 ", "999999"],
+                "departamento": ["AMAZONAS", "LIMA", "LIMA"],
+                "provincia": ["CHACHAPOYAS", "LIMA", "LIMA"],
+                "distrito": ["CHACHAPOYAS", "LIMA", "INVALIDO"],
+                "latitude": ["-6.1", "-12.0", "not-a-number"],
+                "longitude": ["-77.1", "-77.0", "-77.0"],
+            }
+        )
+
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch("loaders.district_centers_loader.pd.read_csv", return_value=source),
+        ):
+            df = DistrictCentersLoader("ubigeo_loader.csv").load()
+
+            self.assertEqual(df["ubigeo"].tolist(), ["010101", "150101"])
+            self.assertEqual(float(df.iloc[0]["latitude"]), -6.1)
+
+    def test_enrich_districts_with_centers_uses_territorial_fallback_when_no_ubigeo(self):
+        districts = [
+            {
+                "departamento_norm": "lima",
+                "provincia_norm": "canete",
+                "distrito_norm": "san vicente de canete",
+            }
+        ]
+        centers = pd.DataFrame(
+            [
+                {
+                    "departamento_norm": "lima",
+                    "provincia_norm": "canete",
+                    "distrito_norm": "san vicente de canete",
+                    "latitude": "-13.077778",
+                    "longitude": "-76.387778",
+                    "ubigeo": "150501",
+                }
+            ]
+        )
+
+        result = enrich_districts_with_centers(districts, centers)
+
+        self.assertEqual(result[0]["ubigeo"], "150501")
+        self.assertEqual(result[0]["center"], [-13.077778, -76.387778])
+
+    def test_enrich_districts_with_centers_does_not_invent_coordinates(self):
+        districts = [
+            {
+                "departamento_norm": "lima",
+                "provincia_norm": "canete",
+                "distrito_norm": "no existe",
+            }
+        ]
+        centers = pd.DataFrame(
+            [
+                {
+                    "departamento_norm": "lima",
+                    "provincia_norm": "canete",
+                    "distrito_norm": "san vicente de canete",
+                    "latitude": "-13.077778",
+                    "longitude": "-76.387778",
+                    "ubigeo": "150501",
+                }
+            ]
+        )
+
+        result = enrich_districts_with_centers(districts, centers)
+
+        self.assertNotIn("center", result[0])
+
     def test_demographic_weight_uses_event_connections_and_household_average(self):
         records = [
             {

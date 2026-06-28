@@ -1,12 +1,14 @@
 import { useEffect } from "react";
 import {
   CircleMarker,
+  Marker,
   MapContainer,
   Popup,
   TileLayer,
   Tooltip,
   useMap,
 } from "react-leaflet";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 const priorityColors = {
@@ -16,10 +18,11 @@ const priorityColors = {
   baja: { color: "#0f766e", fill: "#14b8a6" },
 };
 
-function MapFocus({ points }) {
+function MapFocus({ points, focusKey }) {
   const map = useMap();
 
   useEffect(() => {
+    map.invalidateSize();
     const validPoints = points.filter(
       (point) =>
         Array.isArray(point) &&
@@ -36,21 +39,72 @@ function MapFocus({ points }) {
     }
 
     map.fitBounds(validPoints, { padding: [28, 28], maxZoom: 11 });
-  }, [map, points]);
+  }, [focusKey, map, points]);
 
   return null;
 }
 
-export default function DashboardMiniMap({ districts = [], onDistrictClick }) {
-  const visibleDistricts = districts
-    .filter((district) => district.center)
-    .slice(0, 80);
+const epsIcon = L.divIcon({
+  className: "dashboard-eps-marker",
+  html: "<span>EPS</span>",
+  iconSize: [42, 42],
+  iconAnchor: [21, 21],
+});
 
-  const points = visibleDistricts.map((district) => district.center);
+const epsReferenceIcon = L.divIcon({
+  className: "dashboard-eps-marker dashboard-eps-marker-reference",
+  html: "<span>EPS</span>",
+  iconSize: [42, 42],
+  iconAnchor: [21, 21],
+});
+
+function isValidCoordinatePair(point) {
+  return (
+    Array.isArray(point) &&
+    point.length === 2 &&
+    Number.isFinite(point[0]) &&
+    Number.isFinite(point[1]) &&
+    point[0] >= -90 &&
+    point[0] <= 90 &&
+    point[1] >= -180 &&
+    point[1] <= 180
+  );
+}
+
+function isValidOrigin(origin) {
+  const lat = Number(origin.lat);
+  const lon = Number(origin.lon);
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lon >= -180 &&
+    lon <= 180
+  );
+}
+
+export default function DashboardMiniMap({
+  districts = [],
+  epsOrigins = [],
+  focusKey = 0,
+  onDistrictClick,
+}) {
+  const visibleDistricts = districts.filter((district) => isValidCoordinatePair(district.center));
+  const visibleOrigins = epsOrigins.filter(isValidOrigin);
+
+  const points = [
+    ...visibleDistricts.map((district) => district.center),
+    ...visibleOrigins.map((origin) => [Number(origin.lat), Number(origin.lon)]),
+  ];
   const center = points[0] || [-12.0464, -77.0428];
 
   return (
-    <div className="dashboard-map-shell">
+    <div
+      className="dashboard-map-shell"
+      data-district-count={visibleDistricts.length}
+      data-eps-count={visibleOrigins.length}
+    >
       <MapContainer
         center={center}
         zoom={6}
@@ -62,7 +116,7 @@ export default function DashboardMiniMap({ districts = [], onDistrictClick }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <MapFocus points={points} />
+        <MapFocus points={points} focusKey={focusKey} />
 
         {visibleDistricts.map((district) => {
           const colors = priorityColors[district.criticidad] || priorityColors.baja;
@@ -105,6 +159,27 @@ export default function DashboardMiniMap({ districts = [], onDistrictClick }) {
             </CircleMarker>
           );
         })}
+
+        {visibleOrigins.map((origin) => (
+          <Marker
+            key={origin.id}
+            position={[Number(origin.lat), Number(origin.lon)]}
+            icon={origin.locationType === "referencial" ? epsReferenceIcon : epsIcon}
+          >
+            <Tooltip direction="top" opacity={0.95}>
+              {origin.prestador}
+            </Tooltip>
+            <Popup>
+              <strong>{origin.prestador}</strong>
+              <br />
+              {origin.distrito}, {origin.provincia}
+              <br />
+              {origin.locationType === "referencial"
+                ? "Ubicacion referencial de la EPS"
+                : "Ubicacion de referencia EPS"}
+            </Popup>
+          </Marker>
+        ))}
       </MapContainer>
     </div>
   );

@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 
-const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Dashboard = lazy(() => import("./pages/DashboardOperativo"));
 const Agrupacion = lazy(() => import("./pages/Agrupacion"));
 const Sectorizacion = lazy(() => import("./pages/Sectorizacion"));
 const MapaOperativo = lazy(() => import("./pages/MapaOperativo"));
