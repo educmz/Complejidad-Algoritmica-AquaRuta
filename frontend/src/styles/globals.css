@@ -3072,6 +3072,72 @@ img {
   color: #9a3412;
 }
 
+.conceptual-route-warning,
+.route-not-required {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+  display: grid;
+  gap: 5px;
+  margin-bottom: 12px;
+  padding: 12px;
+}
+
+.conceptual-route-warning strong,
+.route-not-required strong {
+  color: #92400e;
+  font-size: 0.9rem;
+}
+
+.conceptual-route-warning span,
+.conceptual-route-warning small,
+.route-not-required span {
+  color: #78350f;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.route-not-required {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+}
+
+.route-not-required strong,
+.route-not-required span {
+  color: #065f46;
+}
+
+.route-mode-status {
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 11px;
+}
+
+.route-mode-status strong {
+  color: #065f46;
+  font-size: 0.86rem;
+}
+
+.route-mode-status span {
+  color: #047857;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.route-mode-status.local {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.route-mode-status.local strong,
+.route-mode-status.local span {
+  color: #1e40af;
+}
+
 .route-result-grid div.selected strong {
   color: #0f766e;
 }

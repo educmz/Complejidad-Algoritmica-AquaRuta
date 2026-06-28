@@ -15,3 +15,15 @@ TRAFFIC_ESTIMATED_WARNING = (
     "Tráfico estimado por AquaRuta. No corresponde a tráfico vehicular en vivo."
 )
 
+DEFAULT_CONCEPTUAL_ROUTE_SPEED_KMH = 28.0
+CONCEPTUAL_ROUTE_SOURCE = "aquaruta_conceptual"
+CONCEPTUAL_ROUTE_WARNING = (
+    "OpenRouteService no encontró una ruta vial por calles. "
+    "Se muestra una referencia aproximada."
+)
+CONCEPTUAL_ROUTE_MIN_DISTANCE_KM = 0.01
+LOCAL_ROUTE_SOURCE = "aquaruta_local"
+LOCAL_ROUTE_WARNING = (
+    "Conexión local estimada por AquaRuta. No corresponde a una ruta vial validada."
+)
+

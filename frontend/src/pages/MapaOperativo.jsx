@@ -23,6 +23,7 @@ const routeColors = {
   highlighted: "#2563eb",
   best: "#16a34a",
   network: "#64748b",
+  local: "#2563eb",
 };
 
 const ORS_MAX_ALTERNATIVE_ROUTES = 3;
@@ -165,6 +166,23 @@ function splitRouteAlternatives(geoJson, options = {}) {
   const nameOffset = Number(options.nameOffset || 0);
   const via = options.via || "Trazado por calles";
   const normalizedRoutes = [geoJson?.primaryRoute, ...(geoJson?.alternatives || [])];
+  if (geoJson?.routeType === "not_required") {
+    return [{
+      id: `${idPrefix}-not-required`,
+      nombre: "Ruta no requerida",
+      via: geoJson.message || "La EPS se encuentra en la zona destino",
+      geoJson: null,
+      routeMetrics: routeMetricsFromPayload(geoJson),
+      traffic: geoJson.traffic || geoJson.metrics?.traffic || null,
+      routeAvailable: false,
+      routeType: "not_required",
+      routeMode: geoJson.routeMode || "fallback",
+      message: geoJson.message || "",
+      timeFactor: 1,
+      costFactor: 1,
+      speedKmh: 34,
+    }];
+  }
   return (geoJson?.features || []).map((feature, index) => ({
     id: `${idPrefix}-${index + 1}`,
     nombre: `Ruta candidata ${nameOffset + index + 1}`,
@@ -173,6 +191,10 @@ function splitRouteAlternatives(geoJson, options = {}) {
     routeMetrics: routeMetricsFromPayload(geoJson),
     normalizedRoute: normalizedRoutes[index] || null,
     traffic: normalizedRoutes[index]?.traffic || null,
+    routeAvailable: geoJson?.routeAvailable,
+    routeType: geoJson?.routeType || normalizedRoutes[index]?.routeType || "road",
+    routeMode: geoJson?.routeMode || normalizedRoutes[index]?.routeMode || "",
+    warning: geoJson?.warning || normalizedRoutes[index]?.warning || "",
     timeFactor: 1,
     costFactor: 1,
     speedKmh: 34,
@@ -368,14 +390,22 @@ function CandidateRoutesMap({
   const bestRoute = routes.find((route) => route.id === bestRouteId);
   const intersectionNodes = useMemo(() => routeIntersectionNodes(routes), [routes]);
   const showNetwork = routes.length > 0;
-  const showIntersections = mapView === "network" && intersectionNodes.length > 0;
+  const showIntersections = mapView === "local" && intersectionNodes.length > 0;
+  const mapDescription =
+    bestRoute?.routeType === "local"
+      ? "Conexión local azul discontinua; referencia operativa estimada."
+      : bestRoute?.routeType === "conceptual"
+        ? "Referencia conceptual ámbar discontinua; no es una ruta vial validada."
+        : routes.length
+          ? "Ruta vial por calles: mejor ruta verde y alternativa azul."
+          : "Completa la selección y calcula para ver rutas.";
 
   return (
     <article className="route-explorer-map-panel">
       <div className="route-explorer-map-heading">
         <div>
           <h3>Rutas candidatas</h3>
-          <p>{routes.length ? "Red gris, mejor ruta verde, alternativa azul." : "Completa la selección y calcula para ver rutas."}</p>
+          <p>{mapDescription}</p>
         </div>
       </div>
       <div className="route-explorer-map-shell">
@@ -393,8 +423,18 @@ function CandidateRoutesMap({
                 key={`${route.id}-network`}
                 data={route.geoJson}
                 style={{
-                  color: routeColors.network,
-                  dashArray: "7 8",
+                  color:
+                    route.routeType === "conceptual"
+                      ? "#d97706"
+                      : route.routeType === "local"
+                        ? routeColors.local
+                        : routeColors.network,
+                  dashArray:
+                    route.routeType === "conceptual"
+                      ? "4 10"
+                      : route.routeType === "local"
+                        ? "3 9"
+                        : "7 8",
                   opacity: 0.34,
                   weight: 3,
                 }}
@@ -412,7 +452,18 @@ function CandidateRoutesMap({
               key={`${bestRoute.id}-best`}
               data={bestRoute.geoJson}
               style={{
-                color: routeColors.best,
+                color:
+                  bestRoute.routeType === "conceptual"
+                    ? "#d97706"
+                    : bestRoute.routeType === "local"
+                      ? routeColors.local
+                      : routeColors.best,
+                dashArray:
+                  bestRoute.routeType === "conceptual"
+                    ? "8 10"
+                    : bestRoute.routeType === "local"
+                      ? "3 9"
+                      : undefined,
                 opacity: 0.98,
                 weight: 6,
               }}
@@ -429,7 +480,18 @@ function CandidateRoutesMap({
               key={`${activeAlternative.id}-active`}
               data={activeAlternative.geoJson}
               style={{
-                color: routeColors.selected,
+                color:
+                  activeAlternative.routeType === "conceptual"
+                    ? "#d97706"
+                    : activeAlternative.routeType === "local"
+                      ? routeColors.local
+                      : routeColors.selected,
+                dashArray:
+                  activeAlternative.routeType === "conceptual"
+                    ? "8 10"
+                    : activeAlternative.routeType === "local"
+                      ? "3 9"
+                      : undefined,
                 opacity: 0.98,
                 weight: 6,
               }}
@@ -638,15 +700,15 @@ export default function MapaOperativo() {
   const routeRequestKey = useMemo(
     () =>
       selectionComplete
-        ? coordinateSignature([
+        ? `${mapView}:${coordinateSignature([
             [selectedOrigin.lon, selectedOrigin.lat],
             secondRouteWaypoint
               ? [secondRouteWaypoint.center[1], secondRouteWaypoint.center[0]]
               : [0, 0],
             [selectedDestination.center[1], selectedDestination.center[0]],
-          ])
+          ])}`
         : "",
-    [secondRouteWaypoint, selectedDestination, selectedOrigin, selectionComplete]
+    [mapView, secondRouteWaypoint, selectedDestination, selectedOrigin, selectionComplete]
   );
   const activeRouteResults = useMemo(
     () => (routeResultsKey === routeRequestKey ? routeResults : []),
@@ -776,6 +838,7 @@ export default function MapaOperativo() {
           coordinates: selectedRouteCoordinates,
           source: selectedOrigin?.id || selectedOrigin?.prestador || "",
           target: selectedDestination?.id || selectedDestination?.nombre || "",
+          viewMode: mapView === "local" ? "local" : "road",
           alternativeRoutes: {
             target_count: ORS_MAX_ALTERNATIVE_ROUTES,
             share_factor: 0.6,
@@ -793,12 +856,13 @@ export default function MapaOperativo() {
           ],
           source: selectedOrigin?.id || selectedOrigin?.prestador || "",
           target: selectedDestination?.id || selectedDestination?.nombre || "",
+          viewMode: mapView === "local" ? "local" : "road",
         });
       }
 
       const payload = await fetchRouteGeoJsonBatch(routeRequests, { signal: controller.signal });
       if (routeRequestSeqRef.current !== requestSeq || controller.signal.aborted) return;
-      const routes = (payload.routes || [])
+      const candidateRoutes = (payload.routes || [])
         .map(routeGeoJsonFromBatchItem)
         .filter(Boolean)
         .flatMap((geoJson, index) =>
@@ -809,13 +873,36 @@ export default function MapaOperativo() {
               ? "Trazado directo por calles"
                 : `Ruta vía ${secondRouteWaypoint?.nombre || "punto intermedio"}`,
           })
+        );
+      const hasRoadRoute = candidateRoutes.some(
+        (route) => route.routeType !== "conceptual" && route.routeType !== "not_required"
+      );
+      const routes = candidateRoutes
+        .filter(
+          (route) =>
+            !hasRoadRoute ||
+            (route.routeType !== "conceptual" && route.routeType !== "not_required")
         )
         .map((route, index) => ({
           ...route,
-          nombre: `Ruta candidata ${index + 1}`,
-          via: route.id.startsWith("ruta-real-1")
-            ? "Trazado directo por calles"
-            : `Trazado via ${secondRouteWaypoint?.nombre || "punto intermedio"}`,
+          nombre:
+            route.routeType === "not_required"
+              ? "Ruta no requerida"
+              : route.routeType === "local"
+                ? "Red local estimada"
+                : route.routeType === "conceptual"
+                  ? "Ruta conceptual estimada"
+                  : `Ruta candidata ${index + 1}`,
+          via:
+            route.routeType === "not_required"
+              ? route.message
+              : route.routeType === "local"
+                ? "Conexión local estimada; no es una ruta vial"
+                : route.routeType === "conceptual"
+                  ? "Referencia aproximada; no es una ruta vial validada"
+                  : route.id.startsWith("ruta-real-1")
+                    ? "Trazado directo por calles"
+                    : `Trazado via ${secondRouteWaypoint?.nombre || "punto intermedio"}`,
         }))
         .slice(0, MAX_CANDIDATE_ROUTES);
       if (!routes.length) {
@@ -967,10 +1054,13 @@ export default function MapaOperativo() {
                   <select
                     className="control-select"
                     value={mapView}
-                    onChange={(event) => setMapView(event.target.value)}
+                    onChange={(event) => {
+                      setMapView(event.target.value);
+                      resetRouteState();
+                    }}
                   >
                     <option value="road">Ruta vial</option>
-                    <option value="network">Red local</option>
+                    <option value="local">Red local</option>
                   </select>
                 </label>
 
@@ -1093,6 +1183,42 @@ export default function MapaOperativo() {
                   ? "Calcula para ver el resultado."
                   : "Selecciona grupo, sector y zona destino para calcular rutas candidatas."}
               </div>
+            )}
+
+            {hasCalculatedRoutes && selectedRoute?.routeType === "conceptual" && (
+              <section className="conceptual-route-warning">
+                <strong>Ruta conceptual estimada</strong>
+                <span>
+                  No se encontró ruta vial por calles; se muestra referencia conceptual.
+                </span>
+                <small>No es una ruta vial validada.</small>
+              </section>
+            )}
+
+            {hasCalculatedRoutes && selectedRoute?.routeType === "road" && (
+              <section className="route-mode-status road">
+                <strong>Ruta vial calculada</strong>
+                <span>Geometría vial obtenida de OpenRouteService.</span>
+              </section>
+            )}
+
+            {hasCalculatedRoutes && selectedRoute?.routeType === "local" && (
+              <section className="route-mode-status local">
+                <strong>Red local estimada</strong>
+                <span>
+                  Conexión operativa local de referencia. No se presenta como ruta vial validada.
+                </span>
+              </section>
+            )}
+
+            {hasCalculatedRoutes && selectedRoute?.routeType === "not_required" && (
+              <section className="route-not-required">
+                <strong>Ruta no requerida</strong>
+                <span>
+                  {selectedRoute.message ||
+                    "La EPS de referencia se encuentra en la misma zona destino. No se requiere ruta vial."}
+                </span>
+              </section>
             )}
 
             {hasCalculatedRoutes && selectedRoute?.traffic && (

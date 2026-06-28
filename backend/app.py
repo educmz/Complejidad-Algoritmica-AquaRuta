@@ -157,6 +157,7 @@ def _build_route_body(payload: RouteRequest):
         body["source"] = payload.source
     if payload.target:
         body["target"] = payload.target
+    body["view_mode"] = payload.viewMode
     return body
 
 
@@ -174,8 +175,6 @@ def _validate_coordinates(coordinates):
             raise HTTPException(status_code=400, detail="Coordenadas fuera de rango.")
         cleaned.append([lon, lat])
 
-    if cleaned[0] == cleaned[-1]:
-        raise HTTPException(status_code=400, detail="Origen y destino no pueden ser iguales.")
     return cleaned
 
 
@@ -185,6 +184,7 @@ def _request_openrouteservice(body):
         alternative_routes=body.get("alternative_routes"),
         source=body.get("source"),
         target=body.get("target"),
+        view_mode=body.get("view_mode", "road"),
     )
 
 

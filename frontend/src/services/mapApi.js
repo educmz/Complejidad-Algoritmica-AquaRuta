@@ -8,6 +8,7 @@ function routeCacheKey(coordinates, options = {}) {
     alternativeRoutes: options.alternativeRoutes || null,
     source: options.source || "",
     target: options.target || "",
+    viewMode: options.viewMode || "road",
   });
 }
 
@@ -25,6 +26,7 @@ export async function fetchRouteGeoJson(coordinates, options = {}) {
       coordinates,
       ...(options.source ? { source: options.source } : {}),
       ...(options.target ? { target: options.target } : {}),
+      viewMode: options.viewMode || "road",
       ...(options.alternativeRoutes
         ? { alternative_routes: options.alternativeRoutes }
         : {}),
@@ -44,6 +46,7 @@ export async function fetchRouteGeoJsonBatch(routes, options = {}) {
         coordinates: route.coordinates,
         ...(route.source ? { source: route.source } : {}),
         ...(route.target ? { target: route.target } : {}),
+        viewMode: route.viewMode || "road",
         ...(route.alternativeRoutes
           ? { alternative_routes: route.alternativeRoutes }
           : {}),

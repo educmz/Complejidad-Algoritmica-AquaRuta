@@ -7,6 +7,7 @@ from contextlib import contextmanager
 import hashlib
 import json
 import logging
+import math
 import os
 import sqlite3
 import threading
@@ -15,9 +16,15 @@ import time
 import requests
 
 from config.operational_constants import (
+    CONCEPTUAL_ROUTE_MIN_DISTANCE_KM,
+    CONCEPTUAL_ROUTE_SOURCE,
+    CONCEPTUAL_ROUTE_WARNING,
+    DEFAULT_CONCEPTUAL_ROUTE_SPEED_KMH,
     DEFAULT_TIMEOUT_SECONDS,
     DISTANCE_COST_FACTOR,
     ORS_MAX_ALTERNATIVE_ROUTES,
+    LOCAL_ROUTE_SOURCE,
+    LOCAL_ROUTE_WARNING,
     TIME_COST_FACTOR,
     TRAFFIC_ESTIMATED_SOURCE,
     TRAFFIC_MODE_ESTIMATED,
@@ -119,7 +126,7 @@ class ORSService:
                 """
             )
 
-    def _cache_key(self, coordinates, target_count):
+    def _cache_key(self, coordinates, target_count, view_mode="road"):
         origin = coordinates[0]
         destination = coordinates[-1]
         payload = {
@@ -128,11 +135,17 @@ class ORSService:
             "profile": "driving-car",
             "target_count": int(target_count),
             "strategy": STRATEGY_VERSION,
+            "view_mode": view_mode,
         }
         digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
         return digest, payload
 
-    def _get_cached(self, cache_key: str, allow_expired: bool = False):
+    def _get_cached(
+        self,
+        cache_key: str,
+        allow_expired: bool = False,
+        requested_mode: str = "road",
+    ):
         try:
             with self._connect() as conn:
                 row = conn.execute(
@@ -145,10 +158,36 @@ class ORSService:
         if not row:
             return None
         response = json.loads(row[0])
+        if not self._cache_matches_mode(response, requested_mode):
+            logger.info(
+                "ors_cache_ignored requested_mode=%s cached_route_type=%s reason=mode_mismatch",
+                requested_mode,
+                response.get("routeType", "legacy"),
+            )
+            return None
         expired = datetime.fromisoformat(row[1]) < _utc_now()
         if expired and not allow_expired:
             return None
         return self._mark_cached(response, expired=expired)
+
+    def _cache_matches_mode(self, response, requested_mode):
+        route_type = response.get("routeType")
+        source = response.get("source")
+        edge_type = response.get("edge_type")
+        if requested_mode == "local":
+            return route_type == "local"
+        if route_type == "road":
+            return True
+        if route_type in {"conceptual", "local", "not_required"}:
+            return False
+        if source in {CONCEPTUAL_ROUTE_SOURCE, LOCAL_ROUTE_SOURCE}:
+            return False
+        if edge_type in {"conceptual_route", "local_connection", "route_not_required"}:
+            return False
+        return any(
+            self._normalize_ors_feature(feature) is not None
+            for feature in response.get("features", [])
+        )
 
     def _save_cache(self, cache_key, key_payload, response):
         now = _utc_now()
@@ -183,6 +222,19 @@ class ORSService:
             self._route_with_traffic(route)
             for route in copied.get("alternatives", [])
         ]
+        if primary and copied.get("edge_type") == "road_route":
+            copied.setdefault("routeAvailable", True)
+            copied.setdefault("routeType", "road")
+            copied.setdefault("routeMode", "ors")
+            copied.setdefault("requestedSource", copied.get("source"))
+            copied["source"] = "openrouteservice"
+            primary.setdefault("routeType", "road")
+            primary.setdefault("routeMode", "ors")
+            primary.setdefault("source", "openrouteservice")
+            for route in alternatives:
+                route.setdefault("routeType", "road")
+                route.setdefault("routeMode", "ors")
+                route.setdefault("source", "openrouteservice")
         copied["primaryRoute"] = primary
         copied["alternatives"] = alternatives
         metrics = dict(copied.get("metrics", {}))
@@ -216,20 +268,51 @@ class ORSService:
                 time.sleep(self.config.cooldown_seconds - elapsed)
             self._last_request_at = time.monotonic()
 
-    def route(self, coordinates, alternative_routes=None, source=None, target=None):
+    def route(
+        self,
+        coordinates,
+        alternative_routes=None,
+        source=None,
+        target=None,
+        view_mode="road",
+    ):
+        view_mode = "local" if view_mode == "local" else "road"
         target_count = self._target_count(alternative_routes)
-        cache_key, key_payload = self._cache_key(coordinates, target_count)
-        cached = self._get_cached(cache_key)
+        cache_key, key_payload = self._cache_key(
+            coordinates, target_count, view_mode=view_mode
+        )
+        logger.info(
+            "route_request mode=%s origin_lon_lat=%s destination_lon_lat=%s",
+            view_mode,
+            coordinates[0] if coordinates else None,
+            coordinates[-1] if coordinates else None,
+        )
+        cached = self._get_cached(cache_key, requested_mode=view_mode)
         if cached:
             logger.info("ors_cache_hit key=%s", cache_key[:10])
             return cached
 
+        if view_mode == "local":
+            local_response = self._local_response(source, target, coordinates)
+            if local_response is None:
+                return self._unavailable_response(source, target, "unavailable")
+            self._save_cache(cache_key, key_payload, local_response)
+            return local_response
+
         if not self.config.api_key:
-            stale = self._get_cached(cache_key, allow_expired=True)
+            stale = self._get_cached(
+                cache_key, allow_expired=True, requested_mode=view_mode
+            )
             if stale:
                 return stale
             logger.warning("ors_unavailable reason=missing_api_key")
-            return self._unavailable_response(source, target, "unavailable")
+            return self._unavailable_response(
+                source,
+                target,
+                "unavailable",
+                coordinates=coordinates,
+                fallback_reason="missing_api_key",
+            )
 
         body = {
             "coordinates": coordinates,
@@ -249,20 +332,53 @@ class ORSService:
                     headers={"Authorization": self.config.api_key, "Content-Type": "application/json"},
                     timeout=self.config.timeout_seconds,
                 )
+                logger.info(
+                    "ors_response mode=%s status_code=%s origin_lon_lat=%s destination_lon_lat=%s",
+                    view_mode,
+                    response.status_code,
+                    coordinates[0],
+                    coordinates[-1],
+                )
                 response.raise_for_status()
-                normalized = self._normalize_geojson(response.json(), source=source, target=target)
-                self._save_cache(cache_key, key_payload, normalized)
+                payload = response.json()
+                logger.info(
+                    "ors_payload mode=%s features=%s routes=%s",
+                    view_mode,
+                    len(payload.get("features", []) or []),
+                    len(payload.get("routes", []) or []),
+                )
+                normalized = self._normalize_geojson(
+                    payload,
+                    source=source,
+                    target=target,
+                    coordinates=coordinates,
+                )
+                if normalized.get("routeType") == "road":
+                    self._save_cache(cache_key, key_payload, normalized)
+                else:
+                    logger.info(
+                        "ors_cache_skipped mode=road route_type=%s",
+                        normalized.get("routeType"),
+                    )
                 return normalized
             except (requests.RequestException, ValueError) as exc:
                 last_error = exc
                 logger.warning("ors_request_failed attempt=%s error=%s", attempt + 1, exc)
                 if attempt < self.config.max_retries:
                     time.sleep(0.5 * (attempt + 1))
-        stale = self._get_cached(cache_key, allow_expired=True)
+        stale = self._get_cached(
+            cache_key, allow_expired=True, requested_mode=view_mode
+        )
         if stale:
             return stale
         logger.warning("ors_unavailable_after_retries error=%s", last_error)
-        return self._unavailable_response(source, target, "unavailable")
+        return self._unavailable_response(
+            source,
+            target,
+            "unavailable",
+            coordinates=coordinates,
+            fallback_reason="request_error",
+        )
 
     def batch(self, routes):
         results = []
@@ -277,6 +393,7 @@ class ORSService:
                             route.get("alternative_routes"),
                             route.get("source"),
                             route.get("target"),
+                            route.get("view_mode", "road"),
                         ),
                     }
                 )
@@ -292,21 +409,119 @@ class ORSService:
             requested = self.config.alternative_target_count
         return max(1, min(requested, self.config.alternative_target_count, ORS_MAX_ALTERNATIVE_ROUTES))
 
-    def _valid_feature(self, feature):
-        summary = feature.get("properties", {}).get("summary", {})
-        return bool(
-            feature.get("geometry")
-            and summary.get("distance") is not None
-            and summary.get("duration") is not None
-        )
+    def _normalize_ors_feature(self, feature):
+        if not isinstance(feature, dict):
+            return None
+        geometry = feature.get("geometry")
+        if not isinstance(geometry, dict):
+            return None
+        coordinates = geometry.get("coordinates")
+        geometry_type = geometry.get("type")
+        if geometry_type == "LineString":
+            valid_geometry = isinstance(coordinates, list) and len(coordinates) >= 2
+        elif geometry_type == "MultiLineString":
+            valid_geometry = (
+                isinstance(coordinates, list)
+                and sum(len(line) for line in coordinates if isinstance(line, list)) >= 2
+            )
+        else:
+            valid_geometry = False
+        if not valid_geometry:
+            return None
 
-    def _normalize_geojson(self, payload, source=None, target=None):
-        features = [feature for feature in payload.get("features", []) if self._valid_feature(feature)]
+        properties = dict(feature.get("properties") or {})
+        summary = dict(properties.get("summary") or feature.get("summary") or {})
+        if summary.get("distance") is None or summary.get("duration") is None:
+            segments = properties.get("segments") or feature.get("segments") or []
+            if isinstance(segments, list):
+                if summary.get("distance") is None:
+                    summary["distance"] = sum(
+                        float(segment.get("distance", 0) or 0)
+                        for segment in segments
+                        if isinstance(segment, dict)
+                    )
+                if summary.get("duration") is None:
+                    summary["duration"] = sum(
+                        float(segment.get("duration", 0) or 0)
+                        for segment in segments
+                        if isinstance(segment, dict)
+                    )
+        try:
+            distance = float(summary.get("distance"))
+            duration = float(summary.get("duration"))
+        except (TypeError, ValueError):
+            return None
+        if (
+            not math.isfinite(distance)
+            or not math.isfinite(duration)
+            or distance < 0
+            or duration < 0
+        ):
+            return None
+        properties["summary"] = {"distance": distance, "duration": duration}
+        return {
+            **feature,
+            "type": feature.get("type", "Feature"),
+            "geometry": geometry,
+            "properties": properties,
+        }
+
+    def _extract_ors_features(self, payload):
+        raw_features = payload.get("features") or []
+        if not raw_features and isinstance(payload.get("routes"), list):
+            raw_features = [
+                {
+                    "type": "Feature",
+                    "geometry": route.get("geometry"),
+                    "properties": {
+                        "summary": route.get("summary"),
+                        "segments": route.get("segments"),
+                    },
+                }
+                for route in payload["routes"]
+                if isinstance(route, dict)
+            ]
+        return [
+            normalized
+            for feature in raw_features
+            if (normalized := self._normalize_ors_feature(feature)) is not None
+        ]
+
+    def _normalize_geojson(self, payload, source=None, target=None, coordinates=None):
+        features = self._extract_ors_features(payload)
         features.sort(key=lambda feature: feature["properties"]["summary"]["duration"])
         if not features:
-            return self._unavailable_response(source, target, "unavailable")
+            raw_count = len(payload.get("features") or payload.get("routes") or [])
+            return self._unavailable_response(
+                source,
+                target,
+                "unavailable",
+                coordinates=coordinates,
+                fallback_reason=(
+                    "empty_response" if raw_count == 0 else "invalid_geometry"
+                ),
+            )
         primary = self._route_from_feature(features[0])
         alternatives = [self._route_from_feature(feature) for feature in features[1:]]
+        for feature in features:
+            properties = feature.setdefault("properties", {})
+            properties["routeType"] = "road"
+            properties["routeMode"] = "ors"
+        primary.update(
+            {
+                "routeType": "road",
+                "routeMode": "ors",
+                "source": "openrouteservice",
+            }
+        )
+        for route in alternatives:
+            route.update(
+                {
+                    "routeType": "road",
+                    "routeMode": "ors",
+                    "source": "openrouteservice",
+                }
+            )
         metrics = self._metrics_from_routes(primary, alternatives)
         now = _utc_now().isoformat()
         metrics.update(
@@ -322,9 +537,13 @@ class ORSService:
         return {
             "type": "FeatureCollection",
             "features": features,
-            "source": source,
+            "source": "openrouteservice",
+            "requestedSource": source,
             "target": target,
             "edge_type": "road_route",
+            "routeAvailable": True,
+            "routeType": "road",
+            "routeMode": "ors",
             "primaryRoute": primary,
             "alternatives": alternatives,
             "metrics": metrics,
@@ -342,6 +561,40 @@ class ORSService:
             "operationalCost": calcular_costo_operativo(distance_km, duration_min),
             "traffic": traffic,
         }
+
+    def _local_response(self, source, target, coordinates):
+        response = self._conceptual_response(source, target, coordinates)
+        if response is None or response.get("routeType") == "not_required":
+            return response
+
+        response["source"] = LOCAL_ROUTE_SOURCE
+        response["edge_type"] = "local_connection"
+        response["routeType"] = "local"
+        response["routeMode"] = "local_estimated"
+        response["warning"] = LOCAL_ROUTE_WARNING
+        for feature in response.get("features", []):
+            properties = feature.setdefault("properties", {})
+            properties["routeType"] = "local"
+            properties["routeMode"] = "local_estimated"
+        routes = [
+            response.get("primaryRoute"),
+            *response.get("alternatives", []),
+        ]
+        for route in routes:
+            if not isinstance(route, dict):
+                continue
+            route.update(
+                {
+                    "routeType": "local",
+                    "routeMode": "local_estimated",
+                    "source": LOCAL_ROUTE_SOURCE,
+                    "warning": LOCAL_ROUTE_WARNING,
+                }
+            )
+        metrics = response.get("metrics", {})
+        metrics["route_metrics_source"] = LOCAL_ROUTE_SOURCE
+        metrics["source"] = LOCAL_ROUTE_SOURCE
+        return response
 
     def _traffic_metrics(self, base_duration_min):
         service = getattr(self, "traffic_service", None) or TrafficService()
@@ -388,7 +641,24 @@ class ORSService:
             "traffic": traffic,
         }
 
-    def _unavailable_response(self, source, target, route_source):
+    def _unavailable_response(
+        self,
+        source,
+        target,
+        route_source,
+        coordinates=None,
+        fallback_reason="unavailable",
+    ):
+        logger.warning(
+            "conceptual_fallback reason=%s origin_lon_lat=%s destination_lon_lat=%s",
+            fallback_reason,
+            coordinates[0] if coordinates else None,
+            coordinates[-1] if coordinates else None,
+        )
+        conceptual = self._conceptual_response(source, target, coordinates)
+        if conceptual is not None:
+            return conceptual
+
         now = _utc_now().isoformat()
         warning = (
             "No hay ruta vial disponible; el tráfico estimado no pudo calcularse "
@@ -433,3 +703,156 @@ class ORSService:
                 "traffic": traffic,
             },
         }
+
+    def _conceptual_response(self, source, target, coordinates):
+        endpoints = self._valid_endpoints(coordinates)
+        if endpoints is None:
+            return None
+
+        origin, destination = endpoints
+        distance_km = self._haversine_km(origin, destination)
+        if not math.isfinite(distance_km):
+            return None
+        if distance_km <= CONCEPTUAL_ROUTE_MIN_DISTANCE_KM:
+            return self._not_required_response(source, target)
+
+        speed_kmh = float(DEFAULT_CONCEPTUAL_ROUTE_SPEED_KMH)
+        if not math.isfinite(speed_kmh) or speed_kmh <= 0:
+            return None
+        duration_min = round((distance_km / speed_kmh) * 60, 2)
+        distance_km = round(distance_km, 3)
+        traffic = self._traffic_metrics(duration_min)
+        geometry = {
+            "type": "LineString",
+            "coordinates": [origin, destination],
+        }
+        feature = {
+            "type": "Feature",
+            "geometry": geometry,
+            "properties": {
+                "routeType": "conceptual",
+                "routeMode": "fallback",
+                "summary": {
+                    "distance": round(distance_km * 1000, 3),
+                    "duration": round(duration_min * 60, 2),
+                },
+            },
+        }
+        route = {
+            "geometry": geometry,
+            "distanceKm": distance_km,
+            "durationMin": duration_min,
+            "operationalCost": calcular_costo_operativo(
+                distance_km, duration_min
+            ),
+            "routeType": "conceptual",
+            "routeMode": "fallback",
+            "source": CONCEPTUAL_ROUTE_SOURCE,
+            "warning": CONCEPTUAL_ROUTE_WARNING,
+            "traffic": traffic,
+        }
+        metrics = {
+            "cantidad_rutas_validas": 1,
+            "cantidad_rutas_alternativas": 1,
+            "duracion_principal_min": duration_min,
+            "distancia_principal_km": distance_km,
+            "operationalCost": route["operationalCost"],
+            "route_metrics_source": CONCEPTUAL_ROUTE_SOURCE,
+            "route_metrics_cached": False,
+            "source": CONCEPTUAL_ROUTE_SOURCE,
+            "cached": False,
+            "updatedAt": traffic["trafficUpdatedAt"],
+            **traffic,
+            "traffic": traffic,
+        }
+        return {
+            "type": "FeatureCollection",
+            "features": [feature],
+            "source": CONCEPTUAL_ROUTE_SOURCE,
+            "requestedSource": source,
+            "target": target,
+            "edge_type": "conceptual_route",
+            "routeAvailable": True,
+            "routeType": "conceptual",
+            "routeMode": "fallback",
+            "warning": CONCEPTUAL_ROUTE_WARNING,
+            "primaryRoute": route,
+            "alternatives": [dict(route)],
+            "metrics": metrics,
+            "traffic": traffic,
+        }
+
+    def _not_required_response(self, source, target):
+        traffic = self._traffic_metrics(0)
+        message = (
+            "La EPS de referencia se encuentra en la misma zona destino. "
+            "No se requiere ruta vial."
+        )
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "source": CONCEPTUAL_ROUTE_SOURCE,
+            "requestedSource": source,
+            "target": target,
+            "edge_type": "route_not_required",
+            "routeAvailable": False,
+            "routeType": "not_required",
+            "routeMode": "fallback",
+            "message": message,
+            "primaryRoute": None,
+            "alternatives": [],
+            "traffic": traffic,
+            "metrics": {
+                "cantidad_rutas_validas": 0,
+                "cantidad_rutas_alternativas": 0,
+                "duracion_principal_min": 0,
+                "distancia_principal_km": 0,
+                "operationalCost": 0,
+                "route_metrics_source": CONCEPTUAL_ROUTE_SOURCE,
+                "route_metrics_cached": False,
+                "source": CONCEPTUAL_ROUTE_SOURCE,
+                "cached": False,
+                "updatedAt": traffic["trafficUpdatedAt"],
+                **traffic,
+                "traffic": traffic,
+            },
+        }
+
+    @staticmethod
+    def _valid_endpoints(coordinates):
+        if not isinstance(coordinates, (list, tuple)) or len(coordinates) < 2:
+            return None
+        endpoints = []
+        for point in (coordinates[0], coordinates[-1]):
+            if not isinstance(point, (list, tuple)) or len(point) != 2:
+                return None
+            try:
+                lon, lat = float(point[0]), float(point[1])
+            except (TypeError, ValueError):
+                return None
+            if (
+                not math.isfinite(lon)
+                or not math.isfinite(lat)
+                or not -180 <= lon <= 180
+                or not -90 <= lat <= 90
+            ):
+                return None
+            endpoints.append([lon, lat])
+        return endpoints
+
+    @staticmethod
+    def _haversine_km(origin, destination):
+        lon1, lat1 = map(math.radians, origin)
+        lon2, lat2 = map(math.radians, destination)
+        delta_lat = lat2 - lat1
+        delta_lon = lon2 - lon1
+        value = (
+            math.sin(delta_lat / 2) ** 2
+            + math.cos(lat1)
+            * math.cos(lat2)
+            * math.sin(delta_lon / 2) ** 2
+        )
+        value = max(0.0, min(1.0, value))
+        return 6371.0088 * 2 * math.atan2(
+            math.sqrt(value), math.sqrt(1 - value)
+        )
