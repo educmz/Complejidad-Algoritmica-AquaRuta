@@ -119,6 +119,12 @@ const groups = [
   },
 ];
 
+const numericGroups = [
+  { id: "grupo-10", nombre: "Grupo 10", zona_ids: ["lima-lima-sjl"] },
+  { id: "grupo-2", nombre: "Grupo 2", zona_ids: ["lima-lima-miraflores"] },
+  { id: "grupo-1", nombre: "Grupo 1", zona_ids: ["pasco-pasco-yanacancha"] },
+];
+
 const origins = [
   {
     id: "eps-emapa-canete-s-a",
@@ -136,6 +142,11 @@ const pascoOptions = buildDashboardOptions(districts, groups, {
 });
 assert.deepEqual(pascoOptions.departamentos, ["Pasco"]);
 assert.equal(pascoOptions.departamentos.includes("Loreto"), false);
+
+assert.deepEqual(
+  buildDashboardOptions(districts, numericGroups, {}).grupos.map((group) => group.nombre),
+  ["Grupo 1", "Grupo 2", "Grupo 10"]
+);
 
 const loretoOptions = buildDashboardOptions(districts, groups, {
   departamento: "Loreto",
@@ -244,6 +255,8 @@ assert.equal(
 
 const dashboard = await readFile("src/pages/DashboardOperativo.jsx", "utf8");
 const dashboardMap = await readFile("src/components/dashboard/DashboardMiniMap.jsx", "utf8");
+const epsMarker = await readFile("src/components/map/EpsMapMarker.jsx", "utf8");
+const epsIcon = await readFile("src/components/map/epsMapIcon.js", "utf8");
 const dashboardGeo = await readFile("src/utils/dashboardGeo.js", "utf8");
 const css = await readFile("src/styles/globals.css", "utf8");
 const routeElements = await readFile("src/routeElements.jsx", "utf8");
@@ -270,8 +283,10 @@ assert.equal(dashboard.includes("No hay EPS relacionadas con los filtros selecci
 assert.equal(dashboardMap.includes(".slice(0, 80)"), false, "Mapa no debe truncar distritos");
 assert.ok(dashboardMap.includes("data-district-count"));
 assert.ok(dashboardMap.includes("epsOrigins"));
-assert.ok(dashboardMap.includes("dashboard-eps-marker"));
-assert.ok(dashboardMap.includes("dashboard-eps-marker-reference"));
+assert.ok(dashboardMap.includes("EpsMapMarker"));
+assert.ok(epsMarker.includes("getEpsMapIcon"));
+assert.ok(epsIcon.includes("dashboard-eps-marker"));
+assert.ok(epsIcon.includes("dashboard-eps-marker-reference"));
 assert.ok(dashboardMap.includes("fitBounds"));
 
 assert.ok(css.includes(".dashboard-group-grid"));

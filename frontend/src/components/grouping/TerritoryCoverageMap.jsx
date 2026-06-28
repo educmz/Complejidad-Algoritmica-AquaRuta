@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Circle,
   CircleMarker,
   GeoJSON,
   MapContainer,
@@ -13,6 +12,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import EpsMapMarker from "../map/EpsMapMarker";
 
 const priorityColors = {
   critica: { stroke: "#991b1b", fill: "#dc2626" },
@@ -22,29 +22,6 @@ const priorityColors = {
 };
 
 const routeColors = ["#2563eb", "#0f766e", "#7c3aed", "#0891b2", "#1d4ed8"];
-
-function epsIcon() {
-  return L.divIcon({
-    className: "",
-    html: `
-      <div style="
-        align-items:center;
-        background:#0f766e;
-        border:2px solid white;
-        border-radius:8px;
-        box-shadow:0 8px 18px rgba(15,23,42,.2);
-        color:white;
-        display:flex;
-        font:900 10px Inter, Arial, sans-serif;
-        height:32px;
-        justify-content:center;
-        width:38px;
-      ">EPS</div>
-    `,
-    iconAnchor: [19, 16],
-    iconSize: [38, 32],
-  });
-}
 
 function blockIcon(block, isActive) {
   const colors = priorityColors[block.criticidad] || priorityColors.baja;
@@ -111,25 +88,13 @@ function fitMapToPoints(map, points, options = {}) {
 function MapViewportController({
   focusKey,
   focusPoints,
-  groupPoints,
-  coveragePoints,
-  hasReferenceOrigin,
-  referenceNeedsValidation,
-  onShowReferenceEps,
   routeKey,
   routePoints,
 }) {
   const map = useMap();
-  const controlsRef = useRef(null);
   const lastFocusKeyRef = useRef("");
   const lastRouteKeyRef = useRef("");
   const userHasInteractedRef = useRef(false);
-
-  useEffect(() => {
-    if (!controlsRef.current) return;
-    L.DomEvent.disableClickPropagation(controlsRef.current);
-    L.DomEvent.disableScrollPropagation(controlsRef.current);
-  }, []);
 
   useMapEvents({
     dragstart: () => {
@@ -155,39 +120,7 @@ function MapViewportController({
     }
   }, [map, routeKey, routePoints]);
 
-  return (
-    <div ref={controlsRef} className="map-action-controls leaflet-control territory-map-actions">
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          fitMapToPoints(map, groupPoints);
-        }}
-        disabled={!groupPoints.length}
-        title={!groupPoints.length ? "Sin coordenadas disponibles" : "Enfocar nodos del grupo"}
-      >
-        Ver grupo
-      </button>
-      {hasReferenceOrigin && (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onShowReferenceEps();
-            fitMapToPoints(map, coveragePoints, { maxZoom: 13 });
-          }}
-          disabled={!coveragePoints.length}
-          title={
-            referenceNeedsValidation
-              ? "EPS lejana: requiere validación operativa"
-              : "Mostrar el grupo y su EPS de referencia"
-          }
-        >
-          Ver EPS de referencia
-        </button>
-      )}
-    </div>
-  );
+  return null;
 }
 
 function ZoomTracker({ onZoomChange }) {
@@ -200,13 +133,6 @@ function ZoomTracker({ onZoomChange }) {
   }, [map, onZoomChange]);
 
   return null;
-}
-
-function blockCoverageRadius(block) {
-  const isSingleNodeGroup =
-    (block?.validNodes?.length || block?.cantidad_zonas || 0) <= 1;
-
-  return isSingleNodeGroup ? 1600 : Math.max(4500, (block?.spreadKm || 0) * 1000);
 }
 
 function routeMarkerStyle(node, routeResult) {
@@ -222,6 +148,7 @@ function routeMarkerStyle(node, routeResult) {
   return { color: "#166534", fillColor: "#ffffff", dashArray: null };
 }
 
+
 export default function TerritoryCoverageMap({
   viewMode,
   blocks,
@@ -235,13 +162,13 @@ export default function TerritoryCoverageMap({
   routeKey = "",
   routeStatus,
   layers,
+  showLegend = true,
+  focusVersion = 0,
+  mapControls = null,
   onSelectBlock,
   onSelectNode,
 }) {
   const [zoom, setZoom] = useState(7);
-  const [shownReferenceKey, setShownReferenceKey] = useState("");
-  const referenceViewKey = `${activeBlock?.id || ""}|${viewMode}`;
-  const showReferenceEps = shownReferenceKey === referenceViewKey;
   const visibleBlocks = blocks.slice(0, 120);
   const activeGroupNodes = useMemo(
     () => activeBlock?.validNodes || activeBlock?.districts?.filter((node) => node.center) || [],
@@ -282,12 +209,6 @@ export default function TerritoryCoverageMap({
   );
   const routeFocusPoints = routeGeoJsonPoints.length ? routeGeoJsonPoints : routeStopPoints;
   const groupFocusPoints = activeGroupNodes.map((node) => node.center).filter(Boolean);
-  const coverageFocusPoints = [
-    ...groupFocusPoints,
-    ...(activeBlock?.nearestOrigin
-      ? [[activeBlock.nearestOrigin.lat, activeBlock.nearestOrigin.lon]]
-      : []),
-  ].filter(Boolean);
   const focusPoints = [
     ...(viewMode === "rutas" ? routeFocusPoints : []),
     ...(viewMode === "grupos" ? groupFocusPoints : []),
@@ -300,16 +221,14 @@ export default function TerritoryCoverageMap({
     activeBlock?.id || "",
     activeNode?.id || "",
     routePlan?.id || "",
+    focusVersion,
   ].join("|");
   const initialCenter = focusPoints[0] || [-12.0464, -77.0428];
-  const hasViableReference =
-    Boolean(activeBlock?.nearestOrigin) &&
-    ["local", "externa", "lejana"].includes(activeBlock?.epsCoverageKey);
   const epsToRender =
     viewMode === "rutas" && routePlan?.origin
       ? [routePlan.origin]
       : activeBlock && viewMode === "nodos"
-      ? showReferenceEps && hasViableReference
+      ? layers.showEps && activeBlock.nearestOrigin
         ? [activeBlock.nearestOrigin]
         : []
       : activeBlock
@@ -322,15 +241,29 @@ export default function TerritoryCoverageMap({
         <div>
           <h3>
             {viewMode === "grupos"
-              ? "Grupos y nodos asociados"
+              ? "Grupos y distritos asociados"
               : viewMode === "nodos"
-              ? "Nodos del grupo"
-              : "Cobertura sobre red vial"}
+              ? "Distritos del grupo"
+              : "Rutas viales"}
           </h3>
+          {viewMode === "nodos" && (
+            <p>Selecciona un distrito para consultar sus indicadores y localizarlo en el mapa.</p>
+          )}
         </div>
+        {mapControls}
       </div>
 
       <div className="territory-map-shell">
+        {showLegend && viewMode === "nodos" && (
+          <div className="territory-map-legend">
+            <span><i className="critical" />Crítica</span>
+            <span><i className="high" />Alta</span>
+            <span><i className="medium" />Media</span>
+            <span><i className="low" />Baja</span>
+            <span><i className="selected" />Distrito seleccionado</span>
+            <span><i className="eps" />EPS de referencia</span>
+          </div>
+        )}
         <MapContainer
           center={initialCenter}
           zoom={7}
@@ -345,42 +278,10 @@ export default function TerritoryCoverageMap({
           <MapViewportController
             focusKey={focusKey}
             focusPoints={focusPoints}
-            groupPoints={groupFocusPoints}
-            coveragePoints={coverageFocusPoints}
-            hasReferenceOrigin={hasViableReference}
-            referenceNeedsValidation={activeBlock?.epsCoverageKey === "lejana"}
-            onShowReferenceEps={() => setShownReferenceKey(referenceViewKey)}
             routeKey={routeKey}
             routePoints={routeFocusPoints}
           />
 
-          {layers.showBlocks &&
-            (viewMode === "grupos" || viewMode === "nodos") &&
-            visibleBlocks.map((block) => {
-              if (!block.center) return null;
-              const colors = priorityColors[block.criticidad] || priorityColors.baja;
-              const isActive = activeBlock?.id === block.id;
-
-              return (
-                <Circle
-  key={`block-area-${block.id}`}
-  center={block.center}
-  radius={blockCoverageRadius(block)}
-  eventHandlers={{ click: () => onSelectBlock(block.id) }}
-                  pathOptions={{
-                    color: colors.stroke,
-                    fillColor: colors.fill,
-                    fillOpacity: isActive ? 0.1 : 0.035,
-                    opacity: isActive ? 0.72 : 0.32,
-                    weight: isActive ? 3 : 1.5,
-                  }}
-                >
-                  <Tooltip direction="top" opacity={0.94}>
-                    {block.nombre}: {block.cantidad_zonas} zonas, {block.validNodes.length} nodos
-                  </Tooltip>
-                </Circle>
-              );
-            })}
 
           {layers.showBlocks &&
             viewMode === "grupos" &&
@@ -398,7 +299,7 @@ export default function TerritoryCoverageMap({
                   <Popup>
                     <strong>{block.nombre}</strong>
                     <br />
-                    Zonas: {block.zonas?.slice(0, 4).join(", ")}
+                    Distritos: {block.zonas?.slice(0, 4).join(", ")}
                     {block.zonas?.length > 4 ? "..." : ""}
                     <br />
                     EPS de referencia: {block.nearestOrigin?.prestador || "No disponible"}
@@ -473,36 +374,16 @@ export default function TerritoryCoverageMap({
 
           {layers.showEps &&
             epsToRender.map((origin) => (
-              <Marker key={origin.id} position={[origin.lat, origin.lon]} icon={epsIcon()}>
-                <Popup>
-                  <strong>{origin.prestador}</strong>
-                  <br />
-                  {origin.distrito}, {origin.provincia}
-                  {viewMode === "rutas" && (
-                    <>
-                      <br />
-                      Origen operativo de la cobertura
-                    </>
-                  )}
-                </Popup>
-              </Marker>
+              <EpsMapMarker key={origin.id} origin={origin}>
+                {viewMode === "rutas" && (
+                  <>
+                    <br />
+                    Origen operativo de la cobertura
+                  </>
+                )}
+              </EpsMapMarker>
             ))}
 
-          {viewMode === "rutas" &&
-  layers.showBlocks &&
-  activeBlock?.center && (
-    <Circle
-      center={activeBlock.center}
-      radius={blockCoverageRadius(activeBlock)}
-      pathOptions={{
-                  color: "#0f766e",
-                  fillColor: "#14b8a6",
-                  fillOpacity: 0.07,
-                  opacity: 0.7,
-                  weight: 2,
-                }}
-              />
-            )}
 
           {viewMode === "rutas" &&
             layers.showRoutes &&
@@ -566,10 +447,10 @@ export default function TerritoryCoverageMap({
           {viewMode === "grupos"
             ? `${visibleBlocks.length} grupos`
             : activeBlock
-            ? `${visibleNodes.length} nodos georreferenciados / ${
+            ? `${visibleNodes.length} distritos georreferenciados / ${
                 activeBlock.cantidad_zonas || 0
-              } ${visibleNodes.length === 0 ? "zonas registradas" : "zonas"}`
-            : `${visibleNodes.length} nodos renderizados`}
+              } ${visibleNodes.length === 0 ? "distritos registrados" : "distritos"}`
+            : `${visibleNodes.length} distritos renderizados`}
         </span>
         {viewMode === "rutas" && <strong>{routeStatus}</strong>}
       </div>

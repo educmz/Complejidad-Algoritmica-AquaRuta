@@ -537,22 +537,6 @@ export default function DashboardOperativo() {
         </article>
 
         <article className="panel dashboard-filter-panel">
-          <div className="dashboard-panel-heading">
-            <div>
-              <h3 className="panel-title">Filtros territoriales</h3>
-              <p className="panel-subtitle">
-                Las opciones se restringen entre si para evitar combinaciones incompatibles.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="dashboard-soft-button"
-              onClick={clearFilters}
-              disabled={!hasFilters}
-            >
-              Limpiar filtros
-            </button>
-          </div>
           <div className="dashboard-filter-grid">
             <DashboardCombobox
               label="EPS"
@@ -601,6 +585,14 @@ export default function DashboardOperativo() {
               }))}
               onChange={(value) => updateFilter("grupo", value)}
             />
+            <button
+              type="button"
+              className="dashboard-soft-button dashboard-filter-clear"
+              onClick={clearFilters}
+              disabled={!hasFilters}
+            >
+              Limpiar filtros
+            </button>
           </div>
         </article>
 
@@ -699,7 +691,7 @@ export default function DashboardOperativo() {
                   <div>
                     <h3 className="panel-title">Resumen territorial</h3>
                     <p className="panel-subtitle">
-                      El mapa muestra unicamente distritos compatibles con el contexto activo.
+                      Visualiza la distribución de los distritos afectados y los grupos operativos.
                     </p>
                   </div>
                   <div className="dashboard-map-toolbar" aria-label="Controles del mapa">
