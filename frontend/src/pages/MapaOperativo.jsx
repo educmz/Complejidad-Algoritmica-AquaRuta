@@ -8,8 +8,6 @@ import {
   Popup,
   TileLayer,
   Tooltip,
-  useMap,
-  useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -364,54 +362,6 @@ function fitMapToPoints(map, points, options = {}) {
   });
 }
 
-function RouteMapController({ routePoints, expanded, onToggleExpanded }) {
-  const map = useMap();
-  const controlsRef = useRef(null);
-  const userHasInteractedRef = useRef(false);
-
-  useEffect(() => {
-    if (!controlsRef.current) return;
-    L.DomEvent.disableClickPropagation(controlsRef.current);
-    L.DomEvent.disableScrollPropagation(controlsRef.current);
-  }, []);
-
-  useMapEvents({
-    dragstart: () => {
-      userHasInteractedRef.current = true;
-    },
-    zoomstart: () => {
-      userHasInteractedRef.current = true;
-    },
-  });
-
-  return (
-    <div ref={controlsRef} className="map-floating-actions leaflet-control">
-      <button
-        className="route-map-action-button"
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          userHasInteractedRef.current = false;
-          fitMapToPoints(map, routePoints);
-        }}
-      >
-        Ajustar rutas
-      </button>
-      <button
-        className="route-map-action-button map-expand-button"
-        type="button"
-        aria-pressed={expanded}
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleExpanded();
-        }}
-      >
-        {expanded ? "Salir de mapa ampliado" : "Ampliar mapa"}
-      </button>
-    </div>
-  );
-}
-
 function CandidateRoutesMap({
   origin,
   destination,
@@ -425,6 +375,7 @@ function CandidateRoutesMap({
   onHighlightRoute,
   onToggleRoute,
 }) {
+  const mapRef = useRef(null);
   const routePoints = useMemo(
     () => [
       origin ? [origin.lat, origin.lon] : null,
@@ -452,24 +403,48 @@ function CandidateRoutesMap({
 
   return (
     <article className="route-explorer-map-panel">
-      <div className="route-explorer-map-heading">
+      <div className="route-explorer-map-heading route-map-card-header">
         <div>
           <h3>Rutas candidatas</h3>
           <p>{mapDescription}</p>
         </div>
+        <div
+          className="dashboard-map-toolbar route-map-header-actions"
+          aria-label="Controles del mapa"
+        >
+          <button
+            type="button"
+            aria-label={mapExpanded ? "Reducir mapa" : "Ampliar mapa"}
+            title={mapExpanded ? "Reducir mapa" : "Ampliar mapa"}
+            aria-pressed={mapExpanded}
+            onClick={onToggleExpanded}
+          >
+            <span className="toolbar-icon toolbar-icon-expand" aria-hidden="true" />
+            <span>{mapExpanded ? "Reducir" : "Ampliar"}</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Centrar rutas en el mapa"
+            title="Centrar rutas"
+            onClick={() => fitMapToPoints(mapRef.current, routePoints)}
+          >
+            <span className="toolbar-icon toolbar-icon-target" aria-hidden="true" />
+            <span>Centrar</span>
+          </button>
+        </div>
       </div>
       <div className="route-explorer-map-shell">
-        <MapContainer center={initialCenter} zoom={8} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+        <MapContainer
+          ref={mapRef}
+          center={initialCenter}
+          zoom={8}
+          scrollWheelZoom
+          style={{ height: "100%", width: "100%" }}
+        >
           <TileLayer
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <RouteMapController
-            routePoints={routePoints}
-            expanded={mapExpanded}
-            onToggleExpanded={onToggleExpanded}
-          />
-
           {showNetwork &&
             routes.map((route) =>
               route.geoJson ? (
