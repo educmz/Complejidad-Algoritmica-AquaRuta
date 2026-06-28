@@ -252,6 +252,37 @@ function routeScore(route, criterion) {
   return route.distanceKm || 0;
 }
 
+function routeGeometrySignature(route) {
+  const points = geoJsonLatLngs(route.geoJson);
+  if (!points.length) return "no-geometry";
+  const samples = [points[0], points[Math.floor(points.length / 2)], points.at(-1)];
+  return `${points.length}:${samples
+    .map(([lat, lon]) => `${lat.toFixed(4)},${lon.toFixed(4)}`)
+    .join("|")}`;
+}
+
+function dedupeRouteAlternatives(routes) {
+  const exactKeys = new Set();
+  const metricCounts = new Map();
+  return routes.filter((route) => {
+    const metricKey = [
+      route.routeType || "road",
+      route.routeMode || "",
+      Number(route.distanceKm || 0).toFixed(1),
+      Math.round(Number(route.timeMin || 0)),
+      Number(route.cost || 0).toFixed(2),
+      Number(route.routeFragilityPenalty || 0).toFixed(3),
+    ].join(":");
+    const exactKey = `${metricKey}:${routeGeometrySignature(route)}`;
+    if (exactKeys.has(exactKey)) return false;
+    const metricCount = metricCounts.get(metricKey) || 0;
+    if (metricCount >= 2) return false;
+    exactKeys.add(exactKey);
+    metricCounts.set(metricKey, metricCount + 1);
+    return true;
+  });
+}
+
 function chooseWaypoint(origin, destination, candidates) {
   if (!origin || !destination) return null;
   const midpoint = {
@@ -328,7 +359,7 @@ function fitMapToPoints(map, points, options = {}) {
   });
 }
 
-function RouteMapController({ routePoints }) {
+function RouteMapController({ routePoints, expanded, onToggleExpanded }) {
   const map = useMap();
   const controlsRef = useRef(null);
   const userHasInteractedRef = useRef(false);
@@ -349,8 +380,9 @@ function RouteMapController({ routePoints }) {
   });
 
   return (
-    <div ref={controlsRef} className="map-action-controls leaflet-control route-explorer-map-actions">
+    <div ref={controlsRef} className="map-floating-actions leaflet-control">
       <button
+        className="route-map-action-button"
         type="button"
         onClick={(event) => {
           event.stopPropagation();
@@ -359,6 +391,17 @@ function RouteMapController({ routePoints }) {
         }}
       >
         Ajustar rutas
+      </button>
+      <button
+        className="route-map-action-button"
+        type="button"
+        aria-pressed={expanded}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleExpanded();
+        }}
+      >
+        {expanded ? "Salir de mapa ampliado" : "Ampliar mapa"}
       </button>
     </div>
   );
@@ -372,6 +415,8 @@ function CandidateRoutesMap({
   selectedRouteId,
   highlightedRouteId,
   mapView,
+  mapExpanded,
+  onToggleExpanded,
   onHighlightRoute,
   onToggleRoute,
 }) {
@@ -393,11 +438,11 @@ function CandidateRoutesMap({
   const showIntersections = mapView === "local" && intersectionNodes.length > 0;
   const mapDescription =
     bestRoute?.routeType === "local"
-      ? "Conexión local azul discontinua; referencia operativa estimada."
+      ? "Red local estimada. Se muestra como referencia operativa."
       : bestRoute?.routeType === "conceptual"
-        ? "Referencia conceptual ámbar discontinua; no es una ruta vial validada."
+        ? "Referencia conceptual. No es una ruta vial validada."
         : routes.length
-          ? "Ruta vial por calles: mejor ruta verde y alternativa azul."
+          ? "Ruta vial por calles. La mejor alternativa se muestra en verde."
           : "Completa la selección y calcula para ver rutas.";
 
   return (
@@ -414,7 +459,11 @@ function CandidateRoutesMap({
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <RouteMapController routePoints={routePoints} />
+          <RouteMapController
+            routePoints={routePoints}
+            expanded={mapExpanded}
+            onToggleExpanded={onToggleExpanded}
+          />
 
           {showNetwork &&
             routes.map((route) =>
@@ -748,16 +797,17 @@ export default function MapaOperativo() {
         traffic,
       };
     });
+    const uniqueRoutes = dedupeRouteAlternatives(routes);
     const bestByMetric = {
-      distancia: [...routes].sort((a, b) => a.distanceKm - b.distanceKm)[0]?.id,
-      tiempo: [...routes].sort((a, b) => a.timeMin - b.timeMin)[0]?.id,
-      costo: [...routes].sort((a, b) => a.cost - b.cost)[0]?.id,
-      fragilidad: [...routes].sort(
+      distancia: [...uniqueRoutes].sort((a, b) => a.distanceKm - b.distanceKm)[0]?.id,
+      tiempo: [...uniqueRoutes].sort((a, b) => a.timeMin - b.timeMin)[0]?.id,
+      costo: [...uniqueRoutes].sort((a, b) => a.cost - b.cost)[0]?.id,
+      fragilidad: [...uniqueRoutes].sort(
         (a, b) =>
           Number(a.routeFragilityPenalty ?? 999) - Number(b.routeFragilityPenalty ?? 999)
       )[0]?.id,
     };
-    return [...routes]
+    return [...uniqueRoutes]
       .map((route) => {
         const strengths = Object.entries(bestByMetric)
           .filter(([, routeId]) => routeId === route.id)
@@ -768,7 +818,14 @@ export default function MapaOperativo() {
           primaryStrength: strengths[0] || "distancia",
         };
       })
-      .sort((a, b) => routeScore(a, criterion) - routeScore(b, criterion));
+      .sort((a, b) => routeScore(a, criterion) - routeScore(b, criterion))
+      .map((route, index) => ({
+        ...route,
+        nombre:
+          route.routeType === "road"
+            ? `Ruta candidata ${index + 1}`
+            : route.nombre,
+      }));
   }, [activeRouteResults, criterion]);
 
   const bestRoute = enrichedRoutes[0] || null;
@@ -957,13 +1014,6 @@ export default function MapaOperativo() {
           >
             {controlPanelOpen ? "Ocultar controles" : "Mostrar controles"}
           </button>
-          <button
-            type="button"
-            aria-pressed={mapExpanded}
-            onClick={() => setMapExpanded((current) => !current)}
-          >
-            {mapExpanded ? "Salir de mapa ampliado" : "Ampliar mapa"}
-          </button>
         </div>
 
         <article id="route-control-panel" className="panel route-explorer-controls workspace-side-panel">
@@ -1072,16 +1122,12 @@ export default function MapaOperativo() {
                       ? `${formatKm(selectedOrigin.distanceToDestination)} hasta el destino`
                       : "Completa el destino para calcular la EPS"}
                   </small>
-                </div>
-
-                {selectedOrigin && (
-                  <div className="route-origin-summary">
+                  {selectedOrigin && (
                     <span className={`territory-eps-status ${selectedOriginCoverage.key}`}>
                       {selectedOriginCoverage.label}
                     </span>
-                    <small>{selectedOriginCoverage.description}</small>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {epsRequiresValidation(selectedOriginCoverage) && (
                   <div className="territory-route-status warning">
@@ -1128,6 +1174,8 @@ export default function MapaOperativo() {
             selectedRouteId={selectedRouteId}
             highlightedRouteId={highlightedRouteId}
             mapView={mapView}
+            mapExpanded={mapExpanded}
+            onToggleExpanded={() => setMapExpanded((current) => !current)}
             onHighlightRoute={setHighlightedRouteId}
             onToggleRoute={(routeId) => {
               setSelectedInfoRouteId((current) => (current === routeId ? "" : routeId));
@@ -1166,14 +1214,26 @@ export default function MapaOperativo() {
                   <span>Costo operativo estimado</span>
                   <strong>{formatMoney(selectedRoute?.cost)}</strong>
                 </div>
-                <div className="selected">
-                  <span>PenalizaciÃ³n de fragilidad</span>
-                  <strong>{formatDecimal(selectedRoute?.routeFragilityPenalty)}</strong>
-                </div>
-                <div className="selected">
-                  <span>Peso operativo de arista</span>
-                  <strong>{formatDecimal(selectedRoute?.edgeOperationalWeight)}</strong>
-                </div>
+                <section className="route-technical-metrics">
+                  <header>
+                    <strong>Métricas técnicas</strong>
+                    <small>Valores usados por el modelo para comparar rutas.</small>
+                  </header>
+                  <dl>
+                    <dt>Penalización de fragilidad</dt>
+                    <dd>
+                      {selectedRoute?.routeType === "road"
+                        ? formatDecimal(selectedRoute?.routeFragilityPenalty)
+                        : "No aplica"}
+                    </dd>
+                    <dt>Peso operativo de arista</dt>
+                    <dd>
+                      {selectedRoute?.routeType === "road"
+                        ? formatDecimal(selectedRoute?.edgeOperationalWeight)
+                        : "No aplica"}
+                    </dd>
+                  </dl>
+                </section>
               </div>
             ) : (
               <div className="route-result-empty">
@@ -1287,7 +1347,7 @@ export default function MapaOperativo() {
             <div className="route-candidate-list">
               <div className="route-list-heading">
                 <span>Alternativas disponibles</span>
-                <small>Hover resalta; clic fija o libera.</small>
+                <small>Selecciona una alternativa para compararla en el mapa.</small>
               </div>
               {enrichedRoutes.map((route) => (
                 <button
