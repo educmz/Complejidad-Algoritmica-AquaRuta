@@ -25,10 +25,13 @@ for (const [name, content] of [
   ["ExploracionLocal", local],
   ["Sectorizacion", sector],
 ]) {
-  assert.ok(content.includes("workspace-toolbar"), `${name} debe tener barra de herramientas`);
   assert.ok(content.includes("workspace-expanded"), `${name} debe tener modo mapa ampliado`);
-  assert.ok(content.includes("aria-expanded"), `${name} debe tener panel colapsable accesible`);
 }
+
+assert.equal(mapa.includes("Ocultar controles"), false, "Mapa no debe ocultar sus controles");
+assert.equal(local.includes("Ocultar controles"), false, "ExploracionLocal no debe ocultar sus controles");
+assert.ok(sector.includes("workspace-toolbar"), "Sectorizacion debe tener barra de herramientas");
+assert.ok(sector.includes("aria-expanded"), "Sectorizacion debe tener panel colapsable accesible");
 
 for (const selector of [
   ".app-header",

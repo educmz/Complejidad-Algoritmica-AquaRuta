@@ -657,7 +657,6 @@ export default function MapaOperativo() {
   const [highlightedRouteId, setHighlightedRouteId] = useState("");
   const [selectedInfoRouteId, setSelectedInfoRouteId] = useState("");
   const [mapView, setMapView] = useState("road");
-  const [controlPanelOpen, setControlPanelOpen] = useState(true);
   const [mapExpanded, setMapExpanded] = useState(false);
   const routeRequestSeqRef = useRef(0);
   const routeAbortControllerRef = useRef(null);
@@ -824,7 +823,7 @@ export default function MapaOperativo() {
   useEffect(() => {
     const timer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
     return () => window.clearTimeout(timer);
-  }, [controlPanelOpen, mapExpanded]);
+  }, [mapExpanded]);
 
   useEffect(() => {
     return () => {
@@ -975,7 +974,7 @@ export default function MapaOperativo() {
 
   return (
     <MainLayout>
-      <section className={`page-section route-explorer-page workspace-page ${mapExpanded ? "workspace-expanded" : ""} ${controlPanelOpen ? "" : "panel-collapsed"}`}>
+      <section className={`page-section route-explorer-page workspace-page ${mapExpanded ? "workspace-expanded" : ""}`}>
         <article className="page-card route-explorer-hero">
           <div>
             <h2 className="page-title">Exploración de rutas</h2>
@@ -984,17 +983,6 @@ export default function MapaOperativo() {
             </p>
           </div>
         </article>
-
-        <div className="workspace-toolbar" aria-label="Herramientas del mapa operativo">
-          <button
-            type="button"
-            aria-expanded={controlPanelOpen}
-            aria-controls="route-control-panel"
-            onClick={() => setControlPanelOpen((current) => !current)}
-          >
-            {controlPanelOpen ? "Ocultar controles" : "Mostrar controles"}
-          </button>
-        </div>
 
         <article id="route-control-panel" className="panel route-explorer-controls workspace-side-panel">
               <h3 className="panel-title">Controles</h3>

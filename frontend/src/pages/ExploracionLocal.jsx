@@ -158,7 +158,6 @@ export default function ExploracionLocal() {
   const [backtrackingError, setBacktrackingError] = useState("");
   const [backtrackingPayload, setBacktrackingPayload] = useState(null);
   const [backtrackingRetryToken, setBacktrackingRetryToken] = useState(0);
-  const [controlPanelOpen, setControlPanelOpen] = useState(true);
   const [mapExpanded, setMapExpanded] = useState(false);
   const [backtrackingConstraints, setBacktrackingConstraints] = useState({
     maxVisits: 4,
@@ -170,7 +169,7 @@ export default function ExploracionLocal() {
   useEffect(() => {
     const timer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
     return () => window.clearTimeout(timer);
-  }, [controlPanelOpen, mapExpanded]);
+  }, [mapExpanded]);
 
   const selectedGroup =
     groupOptions.find((group) => group.groupId === selectedGroupId) || groupOptions[0] || null;
@@ -752,7 +751,7 @@ export default function ExploracionLocal() {
 
   return (
     <MainLayout>
-      <section className={`page-section local-explorer-page workspace-page ${mapExpanded ? "workspace-expanded" : ""} ${controlPanelOpen ? "" : "panel-collapsed"}`}>
+      <section className={`page-section local-explorer-page workspace-page ${mapExpanded ? "workspace-expanded" : ""}`}>
         <article className="page-card local-explorer-hero">
           <div>
             <h2 className="page-title">Exploración local</h2>
@@ -794,17 +793,6 @@ export default function ExploracionLocal() {
                   {label}
                 </button>
               ))}
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                type="button"
-                className="toolbar-toggle-button"
-                aria-expanded={controlPanelOpen}
-                aria-controls="local-control-panel"
-                onClick={() => setControlPanelOpen((current) => !current)}
-              >
-                {controlPanelOpen ? "Ocultar controles" : "Mostrar controles"}
-              </button>
             </div>
           </div>
         </div>
@@ -1142,7 +1130,6 @@ export default function ExploracionLocal() {
                 mapView,
                 selectedGroup?.groupId || "",
                 selectedSector?.key || "",
-                controlPanelOpen ? "controls-open" : "controls-closed",
                 mapExpanded ? "expanded" : "normal",
                 districtPoints.map((point) => point.id).join(","),
               ].join("|")}
@@ -1348,19 +1335,6 @@ export default function ExploracionLocal() {
                     : "No se encontró una secuencia factible que cumpla con todas las restricciones especificadas."}
                 </p>
                 <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Restricciones aplicadas</span>
-              </div>
-            )}
-
-            {/* 4. Secuencia Recomendada (Listas de Rutas) - Mostrar solo si aplica */}
-            {(mapView === "network" || mapView === "road") && sequenceNodes.length > 0 && (
-              <div className="local-route-list" style={{ marginTop: '16px' }}>
-                <span>Secuencia propuesta</span>
-                {sequenceNodes.map((node, index) => (
-                  <button key={node.id} type="button" onClick={() => toggleNode(node)}>
-                    <strong>{index + 1}. {node.nombre}</strong>
-                    <small>{node.interrupciones?.toLocaleString("es-PE") || 0} interrupciones</small>
-                  </button>
-                ))}
               </div>
             )}
 
