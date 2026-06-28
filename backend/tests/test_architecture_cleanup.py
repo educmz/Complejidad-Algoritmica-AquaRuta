@@ -84,3 +84,75 @@ class ArchitectureCleanupTests(unittest.TestCase):
 
         self.assertGreaterEqual(connection.commit.call_count, 2)
         self.assertGreaterEqual(connection.close.call_count, 2)
+
+    def test_dashboard_filters_do_not_return_data_outside_context(self):
+        backend_app = load_backend_app()
+        all_data = backend_app.get_dashboard()
+        districts = all_data["districts"]
+        sample = next(item for item in districts if item.get("departamento"))
+
+        response = backend_app.get_dashboard(departamento=sample["departamento"])
+
+        self.assertTrue(response["districts"])
+        self.assertTrue(
+            all(item["departamento"] == sample["departamento"] for item in response["districts"])
+        )
+
+    def test_dashboard_incompatible_eps_and_department_returns_empty_context(self):
+        backend_app = load_backend_app()
+        districts = backend_app.get_dashboard()["districts"]
+        departments_by_eps = {}
+        for district in districts:
+            departments_by_eps.setdefault(district.get("eps_principal"), set()).add(
+                district.get("departamento")
+            )
+
+        eps, departments = next(
+            (eps, departments)
+            for eps, departments in departments_by_eps.items()
+            if eps and len(departments) >= 1
+        )
+        incompatible_department = next(
+            district["departamento"]
+            for district in districts
+            if district.get("departamento") not in departments
+        )
+
+        response = backend_app.get_dashboard(eps=eps, departamento=incompatible_department)
+
+        self.assertEqual(response["districts"], [])
+        self.assertEqual(response["groupedZones"], [])
+
+    def test_dashboard_incompatible_province_or_district_returns_empty_context(self):
+        backend_app = load_backend_app()
+        districts = backend_app.get_dashboard()["districts"]
+        sample = next(item for item in districts if item.get("provincia"))
+        incompatible_province = next(
+            item["provincia"]
+            for item in districts
+            if item.get("departamento") != sample["departamento"] and item.get("provincia")
+        )
+
+        response = backend_app.get_dashboard(
+            departamento=sample["departamento"],
+            provincia=incompatible_province,
+        )
+        self.assertEqual(response["districts"], [])
+
+        response = backend_app.get_dashboard(
+            provincia=incompatible_province,
+            distrito=sample["id"],
+        )
+        self.assertEqual(response["districts"], [])
+
+    def test_dashboard_group_outside_selected_district_returns_empty_context(self):
+        backend_app = load_backend_app()
+        all_data = backend_app.get_dashboard()
+        group = next(group for group in all_data["groupedZones"] if group.get("zona_ids"))
+        outside_district = next(
+            district for district in all_data["districts"] if district["id"] not in group["zona_ids"]
+        )
+
+        response = backend_app.get_dashboard(grupo=group["id"], distrito=outside_district["id"])
+
+        self.assertEqual(response["districts"], [])

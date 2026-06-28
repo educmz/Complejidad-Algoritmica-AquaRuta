@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from utils.text_utils import normalizar_nombre_territorial
+from utils.text_utils import normalizar_nombre_territorial, normalize_ubigeo
 
 
 PROMEDIO_NACIONAL_HOGAR = 3.45
@@ -57,10 +57,9 @@ def _clean_number(value) -> float:
 
 
 def _clean_ubigeo(value) -> str:
-    text = "" if value is None or pd.isna(value) else str(value).strip()
-    text = re.sub(r"\.0$", "", text)
-    text = re.sub(r"\D", "", text)
-    return text.zfill(6) if text else ""
+    if value is None or pd.isna(value):
+        return ""
+    return normalize_ubigeo(value)
 
 
 @dataclass
