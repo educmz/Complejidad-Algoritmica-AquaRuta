@@ -54,15 +54,6 @@ function formatDijkstraWeight(value, criterion) {
   return `${formatNumber(value, 1)} km`;
 }
 
-function edgeWeight(edge, criterion) {
-  return Number(edge?.weight || 0) * (CRITERIA[criterion]?.factor || 1);
-}
-
-function normalizedDistance(a, b) {
-  if (!a || !b) return Infinity;
-  return Math.hypot(Number(a[0]) - Number(b[0]), Number(a[1]) - Number(b[1]));
-}
-
 function distanceKm(a, b) {
   if (!a || !b) return Infinity;
   const [lat1, lon1] = a.map((value) => (Number(value) * Math.PI) / 180);
@@ -92,34 +83,6 @@ function nearestOriginToPoint(center, origins) {
       distanceToSector: distanceKm(center, [origin.lat, origin.lon]),
     }))
     .sort((a, b) => a.distanceToSector - b.distanceToSector)[0] || null;
-}
-
-function buildSectorEdges(nodes, criterion, neighbors = 3) {
-  const edgeMap = new Map();
-  nodes.forEach((source) => {
-    const nearest = nodes
-      .filter((target) => target.id !== source.id)
-      .map((target) => ({
-        target,
-        distance: normalizedDistance(source.center, target.center),
-      }))
-      .filter((item) => Number.isFinite(item.distance))
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, neighbors);
-
-    nearest.forEach(({ target, distance }) => {
-      const key = [source.id, target.id].sort().join("::");
-      if (!edgeMap.has(key)) {
-        edgeMap.set(key, {
-          source: source.id,
-          target: target.id,
-          weight: distance,
-          weightLabel: formatWeight(edgeWeight({ weight: distance }, criterion), criterion),
-        });
-      }
-    });
-  });
-  return [...edgeMap.values()];
 }
 
 function routeCoordinateKey(coordinates) {
@@ -170,7 +133,7 @@ export default function ExploracionLocal() {
   );
   const [selectedSectorKey, setSelectedSectorKey] = useState("");
   const [criterion, setCriterion] = useState("distancia");
-  const [mapView, setMapView] = useState("road");
+  const [mapView, setMapView] = useState("network");
   const [disabledNodeIds, setDisabledNodeIds] = useState(() => new Set());
   const [roadRouteGeoJson, setRoadRouteGeoJson] = useState(null);
   const [roadRouteKey, setRoadRouteKey] = useState("");
@@ -280,8 +243,8 @@ export default function ExploracionLocal() {
     [disabledNodeIds, sectorDistricts]
   );
   const selectedTarget =
-    activeSectorNodes.find((node) => node.id === selectedTargetId) ||
-    activeSectorNodes[activeSectorNodes.length - 1] ||
+    sectorDistricts.find((node) => node.id === selectedTargetId) ||
+    sectorDistricts[sectorDistricts.length - 1] ||
     null;
   const selectedTraversalOrigin =
     activeSectorNodes.find((node) => node.id === selectedTraversalOriginId) ||
@@ -330,15 +293,19 @@ export default function ExploracionLocal() {
     [dijkstraPayload, originNode]
   );
   const orderMap = new Map(sequenceNodes.map((node, index) => [node.id, index + 1]));
-  const sectorBaseEdges = useMemo(
-    () => buildSectorEdges(sectorDistricts, criterion),
-    [criterion, sectorDistricts]
-  );
   const sequenceEdges = useMemo(
-    () => (tspPayload?.edges || []).map((edge) => ({
-      ...edge,
-      weightLabel: formatWeight(Number(edge.weight || 0), criterion),
-    })),
+    () => (tspPayload?.edges || []).map((edge) => {
+      const hasWeight = edge.weight !== null && edge.weight !== undefined
+        && edge.weight !== "" && Number.isFinite(Number(edge.weight));
+      return {
+        ...edge,
+        weightLabel: hasWeight
+          ? `${formatWeight(Number(edge.weight), criterion)}${
+              criterion === "distancia" ? "" : " aprox."
+            }`
+          : "",
+      };
+    }),
     [criterion, tspPayload]
   );
   const dijkstraEdges = useMemo(
@@ -350,6 +317,10 @@ export default function ExploracionLocal() {
       isShortestPath: true,
     })),
     [criterion, dijkstraPayload]
+  );
+  const dijkstraPathIds = useMemo(
+    () => new Set((dijkstraPayload?.path || []).map((item) => item.nodeId)),
+    [dijkstraPayload]
   );
   const traversalOrderMap = useMemo(
     () =>
@@ -391,7 +362,7 @@ export default function ExploracionLocal() {
   );
   const visibleEdges =
     mapView === "network"
-      ? [...sectorBaseEdges, ...sequenceEdges]
+      ? sequenceEdges
       : mapView === "dijkstra"
       ? dijkstraEdges
       : mapView === "traversal"
@@ -412,11 +383,18 @@ export default function ExploracionLocal() {
   const districtPoints = mapView === "network" || mapView === "dijkstra" || mapView === "traversal" || mapView === "backtracking"
     ? [
         ...(originNode ? [originNode] : []),
-        ...sectorDistricts.map((node) => ({
+        ...sectorDistricts
+          .filter(
+            (node) =>
+              mapView !== "dijkstra" ||
+              dijkstraPathIds.has(node.id) ||
+              node.id === selectedTarget?.id
+          )
+          .map((node) => ({
           ...node,
-          isActiveNode: !disabledNodeIds.has(node.id),
+          isActiveNode: mapView === "dijkstra" || !disabledNodeIds.has(node.id),
           isExcluded:
-            disabledNodeIds.has(node.id) ||
+            (mapView !== "dijkstra" && disabledNodeIds.has(node.id)) ||
             (mapView === "traversal" && traversalUnreachableIds.has(node.id)) ||
             (mapView === "backtracking" && backtrackingUnvisitedIds.has(node.id)),
           isGoal:
@@ -428,29 +406,35 @@ export default function ExploracionLocal() {
               ? false
               : false,
           mapOrder:
-            mapView === "traversal"
+            mapView === "dijkstra"
+              ? null
+              : mapView === "traversal"
               ? traversalOrderMap.get(node.id) || null
               : mapView === "backtracking"
               ? backtrackingOrderMap.get(node.id) || null
               : orderMap.get(node.id) || null,
-        })),
+          })),
       ]
     : [];
 
   const activeNodeCount = activeSectorNodes.length;
   const excludedNodeCount = sectorDistricts.length - activeNodeCount;
-  const localEdgeCount = sectorBaseEdges.length;
+  const displayedNodeCount =
+    mapView === "dijkstra" ? sectorDistricts.length : activeNodeCount;
+  const displayedExcludedNodeCount =
+    mapView === "dijkstra" ? 0 : excludedNodeCount;
   const criterionInfo = CRITERIA[criterion];
-  const viewMode =
-    mapView === "road"
-      ? "Ruta vial"
-      : mapView === "dijkstra"
-      ? "Camino minimo"
-      : mapView === "traversal"
-      ? "Recorrido logico"
-      : mapView === "backtracking"
-      ? "Backtracking"
-      : "Red local";
+  const hasValidDijkstraPath =
+    dijkstraStatus === "success" && (dijkstraPayload?.path?.length || 0) > 1;
+  const showDijkstraNoConnection =
+    dijkstraStatus === "unreachable" ||
+    (dijkstraStatus === "success" && !hasValidDijkstraPath);
+  const resultMetricLabel =
+    criterion === "tiempo"
+      ? "Tiempo estimado"
+      : criterion === "costo"
+      ? "Costo estimado"
+      : "Distancia estimada";
   const roadRouteCoordinates = useMemo(
     () =>
       routePoints.length > 1
@@ -463,12 +447,12 @@ export default function ExploracionLocal() {
     () => ({
       originId: selectedOrigin?.id || "",
       targetId: selectedTarget?.id || "",
-      nodeIds: activeSectorNodes.map((node) => node.id),
+      nodeIds: sectorDistricts.map((node) => node.id),
       criterion,
       maxNodes: 80,
       maxNeighbors: 4,
     }),
-    [activeSectorNodes, criterion, selectedOrigin?.id, selectedTarget?.id]
+    [criterion, sectorDistricts, selectedOrigin?.id, selectedTarget?.id]
   );
   const traversalRequest = useMemo(
     () => ({
@@ -492,14 +476,14 @@ export default function ExploracionLocal() {
   );
 
   useEffect(() => {
-    if (selectedTargetId && activeSectorNodes.some((node) => node.id === selectedTargetId)) {
+    if (selectedTargetId && sectorDistricts.some((node) => node.id === selectedTargetId)) {
       return;
     }
     const timer = window.setTimeout(() => {
-      setSelectedTargetId(activeSectorNodes[activeSectorNodes.length - 1]?.id || "");
+      setSelectedTargetId(sectorDistricts[sectorDistricts.length - 1]?.id || "");
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [activeSectorNodes, selectedTargetId]);
+  }, [sectorDistricts, selectedTargetId]);
 
   useEffect(() => {
     if (
@@ -535,6 +519,7 @@ export default function ExploracionLocal() {
     const controller = new AbortController();
     const loadingTimer = window.setTimeout(() => {
       setTspStatus("loading");
+      setTspPayload(null);
       setTspError("");
     }, 0);
 
@@ -579,6 +564,7 @@ export default function ExploracionLocal() {
     const controller = new AbortController();
     const loadingTimer = window.setTimeout(() => {
       setDijkstraStatus("loading");
+      setDijkstraPayload(null);
       setDijkstraError("");
     }, 0);
 
@@ -732,7 +718,7 @@ export default function ExploracionLocal() {
   }, [currentRoadRouteKey, mapView, roadRouteCoordinates, roadRouteError, roadRouteGeoJson, roadRouteKey]);
 
   function toggleNode(node) {
-    if (node.isEpsNode) return;
+    if (node.isEpsNode || mapView === "dijkstra") return;
     setDisabledNodeIds((current) => {
       const next = new Set(current);
       if (next.has(node.id)) next.delete(node.id);
@@ -780,7 +766,7 @@ export default function ExploracionLocal() {
               <strong>{selectedSector?.nombre || "No disponible"}</strong>
             </div>
             <div>
-              <span>Priorizar secuencia por</span>
+              <span>Priorizar atención por</span>
               <strong>{criterionInfo.label}</strong>
             </div>
             <div>
@@ -790,48 +776,43 @@ export default function ExploracionLocal() {
           </div>
         </article>
 
-        <div className="workspace-toolbar" aria-label="Herramientas de exploracion local">
-          <div className="algorithm-tabs" role="tablist" aria-label="Algoritmo visible">
-            {[
-              ["network", "TSP"],
-              ["dijkstra", "Dijkstra"],
-              ["traversal", traversalAlgorithm.toUpperCase()],
-              ["backtracking", "Backtracking"],
-              ["road", "Ruta vial"],
-            ].map(([id, label]) => (
+        <div className="workspace-toolbar" aria-label="Herramientas de exploración local" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div className="algorithm-tabs" role="tablist" aria-label="Algoritmo visible">
+              {[
+                ["network", "Secuencia óptima"],
+                ["dijkstra", "Camino mínimo"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={mapView === id}
+                  className={mapView === id ? "active" : ""}
+                  onClick={() => setMapView(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
-                key={id}
                 type="button"
-                role="tab"
-                aria-selected={mapView === id}
-                className={mapView === id ? "active" : ""}
-                onClick={() => setMapView(id)}
+                className="toolbar-toggle-button"
+                aria-expanded={controlPanelOpen}
+                aria-controls="local-control-panel"
+                onClick={() => setControlPanelOpen((current) => !current)}
               >
-                {label}
+                {controlPanelOpen ? "Ocultar controles" : "Mostrar controles"}
               </button>
-            ))}
+            </div>
           </div>
-          <button
-            type="button"
-            aria-expanded={controlPanelOpen}
-            aria-controls="local-control-panel"
-            onClick={() => setControlPanelOpen((current) => !current)}
-          >
-            {controlPanelOpen ? "Ocultar controles" : "Mostrar controles"}
-          </button>
-          <button
-            type="button"
-            aria-pressed={mapExpanded}
-            onClick={() => setMapExpanded((current) => !current)}
-          >
-            {mapExpanded ? "Salir de mapa ampliado" : "Ampliar mapa"}
-          </button>
         </div>
 
         <article id="local-control-panel" className="panel local-control-panel workspace-side-panel">
             <h3 className="panel-title">Controles locales</h3>
             <p className="panel-subtitle">
-              Selecciona grupo, sector, criterio y vista para recalcular la secuencia.
+              Selecciona el sector y el criterio de atención.
             </p>
 
             <div className="local-control-stack">
@@ -872,8 +853,30 @@ export default function ExploracionLocal() {
                 </select>
               </label>
 
+              {/* Zona destino (Show only for Dijkstra) */}
+              {mapView === "dijkstra" && (
+                <label className="control-group local-target-control">
+                  <span className="control-label">Zona destino</span>
+                  <select
+                    className="control-select"
+                    value={selectedTarget?.id || ""}
+                    onChange={(event) => setSelectedTargetId(event.target.value)}
+                  >
+                    {sectorDistricts.map((node) => (
+                      <option key={node.id} value={node.id}>
+                        {node.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
               <label className="control-group">
-                <span className="control-label">Priorizar secuencia por</span>
+                <span className="control-label">
+                  {mapView === "dijkstra"
+                    ? "Calcular camino por"
+                    : "Priorizar atención por"}
+                </span>
                 <select
                   className="control-select"
                   value={criterion}
@@ -881,183 +884,168 @@ export default function ExploracionLocal() {
                 >
                   {Object.entries(CRITERIA).map(([id, option]) => (
                     <option key={id} value={id}>
-                      Ruta por {option.label}
+                      {mapView === "dijkstra"
+                        ? option.label.charAt(0).toUpperCase() + option.label.slice(1)
+                        : `Ruta por ${option.label}`}
                     </option>
                   ))}
                 </select>
               </label>
 
-              <label className="control-group">
-                <span className="control-label">Destino para camino minimo</span>
-                <select
-                  className="control-select"
-                  value={selectedTarget?.id || ""}
-                  onChange={(event) => setSelectedTargetId(event.target.value)}
-                >
-                  {activeSectorNodes.map((node) => (
-                    <option key={node.id} value={node.id}>
-                      {node.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="control-group">
-                <span className="control-label">Origen del recorrido logico</span>
-                <select
-                  className="control-select"
-                  value={selectedTraversalOrigin?.id || ""}
-                  onChange={(event) => setSelectedTraversalOriginId(event.target.value)}
-                >
-                  {activeSectorNodes.map((node) => (
-                    <option key={node.id} value={node.id}>
-                      {node.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="control-group">
-                <span className="control-label">Recorrido logico</span>
-                <select
-                  className="control-select"
-                  value={traversalAlgorithm}
-                  onChange={(event) => setTraversalAlgorithm(event.target.value)}
-                >
-                  <option value="bfs">BFS por niveles</option>
-                  <option value="dfs">DFS en profundidad</option>
-                </select>
-              </label>
-
-              <div className="local-summary-grid compact">
+              {/* Zona de inicio (Show only for Traversal) */}
+              {mapView === "traversal" && (
                 <label className="control-group">
-                  <span className="control-label">Max. visitas</span>
-                  <input
-                    className="control-input"
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={backtrackingConstraints.maxVisits}
-                    onChange={(event) => updateBacktrackingConstraint("maxVisits", event.target.value)}
-                  />
+                  <span className="control-label">Zona de inicio</span>
+                  <select
+                    className="control-select"
+                    value={selectedTraversalOrigin?.id || ""}
+                    onChange={(event) => setSelectedTraversalOriginId(event.target.value)}
+                  >
+                    {activeSectorNodes.map((node) => (
+                      <option key={node.id} value={node.id}>
+                        {node.nombre}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-                <label className="control-group">
-                  <span className="control-label">Max. km</span>
-                  <input
-                    className="control-input"
-                    type="number"
-                    min="0"
-                    max="2000"
-                    value={backtrackingConstraints.maxDistanceKm}
-                    onChange={(event) => updateBacktrackingConstraint("maxDistanceKm", event.target.value)}
-                  />
-                </label>
-                <label className="control-group">
-                  <span className="control-label">Max. min</span>
-                  <input
-                    className="control-input"
-                    type="number"
-                    min="0"
-                    max="5000"
-                    value={backtrackingConstraints.maxDurationMin}
-                    onChange={(event) => updateBacktrackingConstraint("maxDurationMin", event.target.value)}
-                  />
-                </label>
-                <label className="control-group">
-                  <span className="control-label">Max. costo</span>
-                  <input
-                    className="control-input"
-                    type="number"
-                    min="0"
-                    max="50000"
-                    value={backtrackingConstraints.maxOperationalCost}
-                    onChange={(event) => updateBacktrackingConstraint("maxOperationalCost", event.target.value)}
-                  />
-                </label>
-              </div>
+              )}
 
-              <div className="local-metric-card">
-                <span>Recorrido estimado</span>
-                <strong>{routePoints.length > 1 ? formatWeight(tspResult.totalDistance, criterion) : "Sin secuencia"}</strong>
-                <small>Calculado con {activeNodeCount} zonas incluidas del sector.</small>
-              </div>
+              {/* Tipo de recorrido (Show only for Traversal) */}
+              {mapView === "traversal" && (
+                <label className="control-group">
+                  <span className="control-label">Tipo de recorrido</span>
+                  <select
+                    className="control-select"
+                    value={traversalAlgorithm}
+                    onChange={(event) => setTraversalAlgorithm(event.target.value)}
+                  >
+                    <option value="bfs">Por niveles (BFS)</option>
+                    <option value="dfs">En profundidad (DFS)</option>
+                  </select>
+                </label>
+              )}
 
-              {tspStatus === "idle" && (
-                <div className="local-route-status">
+              {/* Restricciones operativas (Show only for Backtracking) */}
+              {mapView === "backtracking" && (
+                <fieldset className="constraints-fieldset" style={{ border: '1px solid var(--border-soft)', borderRadius: '8px', padding: '12px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <legend style={{ padding: '0 8px', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Restricciones operativas</legend>
+                  <label className="control-group">
+                    <span className="control-label">Máximo de zonas</span>
+                    <input
+                      className="control-input"
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={backtrackingConstraints.maxVisits}
+                      onChange={(event) => updateBacktrackingConstraint("maxVisits", event.target.value)}
+                    />
+                  </label>
+                  <label className="control-group">
+                    <span className="control-label">Distancia máxima (km)</span>
+                    <input
+                      className="control-input"
+                      type="number"
+                      min="0"
+                      max="2000"
+                      value={backtrackingConstraints.maxDistanceKm}
+                      onChange={(event) => updateBacktrackingConstraint("maxDistanceKm", event.target.value)}
+                    />
+                  </label>
+                  <label className="control-group">
+                    <span className="control-label">Tiempo máximo (min)</span>
+                    <input
+                      className="control-input"
+                      type="number"
+                      min="0"
+                      max="5000"
+                      value={backtrackingConstraints.maxDurationMin}
+                      onChange={(event) => updateBacktrackingConstraint("maxDurationMin", event.target.value)}
+                    />
+                  </label>
+                  <label className="control-group">
+                    <span className="control-label">Costo máximo (S/)</span>
+                    <input
+                      className="control-input"
+                      type="number"
+                      min="0"
+                      max="50000"
+                      value={backtrackingConstraints.maxOperationalCost}
+                      onChange={(event) => updateBacktrackingConstraint("maxOperationalCost", event.target.value)}
+                    />
+                  </label>
+                </fieldset>
+              )}
+
+              {mapView === "network" && tspStatus === "idle" && (
+                <div className="local-route-status info">
                   Selecciona un sector y un punto de origen.
                 </div>
               )}
 
-              {tspStatus === "loading" && (
-                <div className="local-route-status">
+              {mapView === "network" && tspStatus === "loading" && (
+                <div className="local-route-status info">
                   Calculando secuencia de visita...
                 </div>
               )}
 
-              {tspStatus === "empty" && (
-                <div className="local-route-status">
+              {mapView === "network" && tspStatus === "empty" && (
+                <div className="local-route-status warning">
                   No hay destinos disponibles en el sector seleccionado.
                 </div>
               )}
 
-              {tspStatus === "error" && (
+              {mapView === "network" && tspStatus === "error" && (
                 <div className="local-route-status error">
                   <span>{tspError || "No se pudo calcular la secuencia de visita."}</span>
-                  <button type="button" onClick={retryTsp}>Reintentar</button>
-                </div>
-              )}
-
-              {tspResult.usedFallback && (
-                <div className="local-route-status warning">
-                  Se muestra una ruta aproximada para mantener un tiempo de respuesta adecuado.
+                  <button type="button" onClick={retryTsp} style={{ marginLeft: '6px', background: 'transparent', textDecoration: 'underline', color: 'inherit', cursor: 'pointer' }}>Reintentar</button>
                 </div>
               )}
 
               {mapView === "dijkstra" && dijkstraStatus === "idle" && (
-                <div className="local-route-status">
+                <div className="local-route-status info">
                   Selecciona un origen, un destino y un criterio.
                 </div>
               )}
 
               {mapView === "dijkstra" && dijkstraStatus === "loading" && (
-                <div className="local-route-status">
-                  Calculando el camino minimo...
+                <div className="local-route-status info">
+                  Calculando el camino mínimo...
                 </div>
               )}
 
               {mapView === "dijkstra" && dijkstraStatus === "empty" && (
-                <div className="local-route-status">
+                <div className="local-route-status warning">
                   No hay destinos disponibles en el sector seleccionado.
                 </div>
               )}
 
               {mapView === "dijkstra" && dijkstraStatus === "unreachable" && (
                 <div className="local-route-status warning">
-                  No existe una conexion disponible entre los nodos seleccionados.
+                  No existe una conexión disponible entre los nodos seleccionados.
                 </div>
               )}
 
               {mapView === "dijkstra" && dijkstraStatus === "error" && (
                 <div className="local-route-status error">
-                  <span>{dijkstraError || "No se pudo calcular el camino minimo."}</span>
-                  <button type="button" onClick={retryDijkstra}>Reintentar</button>
+                  <span>{dijkstraError || "No se pudo calcular el camino mínimo."}</span>
+                  <button type="button" onClick={retryDijkstra} style={{ marginLeft: '6px', background: 'transparent', textDecoration: 'underline', color: 'inherit', cursor: 'pointer' }}>Reintentar</button>
                 </div>
               )}
 
               {mapView === "traversal" && traversalStatus === "idle" && (
-                <div className="local-route-status">
+                <div className="local-route-status info">
                   Selecciona un origen y un recorrido.
                 </div>
               )}
 
               {mapView === "traversal" && traversalStatus === "loading" && (
-                <div className="local-route-status">
+                <div className="local-route-status info">
                   Calculando recorrido...
                 </div>
               )}
 
               {mapView === "traversal" && traversalStatus === "empty" && (
-                <div className="local-route-status">
+                <div className="local-route-status warning">
                   No hay nodos disponibles en el sector seleccionado.
                 </div>
               )}
@@ -1071,91 +1059,93 @@ export default function ExploracionLocal() {
               {mapView === "traversal" && traversalStatus === "error" && (
                 <div className="local-route-status error">
                   <span>{traversalError || "No se pudo calcular el recorrido."}</span>
-                  <button type="button" onClick={retryTraversal}>Reintentar</button>
+                  <button type="button" onClick={retryTraversal} style={{ marginLeft: '6px', background: 'transparent', textDecoration: 'underline', color: 'inherit', cursor: 'pointer' }}>Reintentar</button>
                 </div>
               )}
 
               {mapView === "backtracking" && backtrackingStatus === "idle" && (
-                <div className="local-route-status">
+                <div className="local-route-status info">
                   Selecciona un origen y los destinos.
                 </div>
               )}
 
               {mapView === "backtracking" && backtrackingStatus === "loading" && (
-                <div className="local-route-status">
+                <div className="local-route-status info">
                   Evaluando secuencias factibles...
                 </div>
               )}
 
               {mapView === "backtracking" && backtrackingStatus === "empty" && (
-                <div className="local-route-status">
+                <div className="local-route-status warning">
                   No hay destinos disponibles en el sector seleccionado.
                 </div>
               )}
 
               {mapView === "backtracking" && backtrackingStatus === "success" && (
-                <div className="local-route-status">
-                  Se encontro una secuencia operativa.
+                <div className="local-route-status success">
+                  Se encontró una secuencia operativa.
                 </div>
               )}
 
               {mapView === "backtracking" && backtrackingStatus === "infeasible" && (
                 <div className="local-route-status warning">
-                  No se encontro una secuencia que cumpla las restricciones.
+                  No se encontró una secuencia que cumpla las restricciones.
                 </div>
               )}
 
               {mapView === "backtracking" && backtrackingStatus === "fallback" && (
                 <div className="local-route-status warning">
-                  Se utilizo una aproximacion por el tamano del conjunto.
+                  Se utilizó una aproximación por el tamaño del conjunto.
                 </div>
               )}
 
               {mapView === "backtracking" && backtrackingStatus === "error" && (
                 <div className="local-route-status error">
                   <span>{backtrackingError || "No se pudo evaluar la secuencia."}</span>
-                  <button type="button" onClick={retryBacktracking}>Reintentar</button>
+                  <button type="button" onClick={retryBacktracking} style={{ marginLeft: '6px', background: 'transparent', textDecoration: 'underline', color: 'inherit', cursor: 'pointer' }}>Reintentar</button>
                 </div>
               )}
 
-              <label className="control-group">
-                <span className="control-label">Tipo de visualización</span>
-                <select
-                  className="control-select"
-                  value={mapView}
-                  onChange={(event) => setMapView(event.target.value)}
-                >
-                  <option value="road">Ruta vial</option>
-                  <option value="network">Red local</option>
-                  <option value="dijkstra">Camino minimo</option>
-                  <option value="traversal">Recorrido logico</option>
-                  <option value="backtracking">Backtracking</option>
-                </select>
-              </label>
-
             </div>
-          </article>
+        </article>
 
         <section className="local-explorer-layout">
 
           <div className="local-map-panel">
             <AquaMap
               mapTitle="Mapa de exploración local"
-              mapSubtitle={`${viewMode}: secuencia de atención del sector completo.`}
+              mapSubtitle={
+                mapView === "dijkstra"
+                  ? "Camino recomendado entre el origen y la zona destino."
+                  : "Secuencia propuesta para atender las zonas del sector."
+              }
               origins={selectedOrigin ? [selectedOrigin] : []}
               districtPoints={districtPoints}
               activeCenter={selectedSectorCenter}
               routePoints={mapView === "road" ? routePoints : mapView === "dijkstra" ? dijkstraRoutePoints : []}
+              focusRoutePoints={mapView === "dijkstra" ? dijkstraRoutePoints : routePoints}
               routeGeoJson={mapView === "road" ? roadRouteGeoJson : null}
               routeColor={mapView === "dijkstra" ? "#2563eb" : mapView === "traversal" ? "#9333ea" : mapView === "backtracking" ? "#b45309" : "#16a34a"}
               showConceptRouteFallback={mapView !== "road"}
               graphEdges={visibleEdges}
               highlightedPathEdges={mapView === "network" || mapView === "traversal" || mapView === "backtracking" ? highlightedPathEdges : []}
-              showEdgeWeights={mapView === "network" || mapView === "traversal" || mapView === "backtracking"}
+              showEdgeWeights={false}
+              showHighlightedEdgeLabels={mapView === "network"}
               edgeWeightLabel={criterionInfo.edgeLabel}
               showDistrictMarkers
               onDistrictClick={toggleNode}
               height={760}
+              headerMapActions
+              mapExpanded={mapExpanded}
+              onToggleMapExpanded={() => setMapExpanded((current) => !current)}
+              viewportLayoutKey={[
+                mapView,
+                selectedGroup?.groupId || "",
+                selectedSector?.key || "",
+                controlPanelOpen ? "controls-open" : "controls-closed",
+                mapExpanded ? "expanded" : "normal",
+                districtPoints.map((point) => point.id).join(","),
+              ].join("|")}
             />
 
             {mapView === "road" && (roadRouteLoading || roadRouteError) && (
@@ -1166,143 +1156,129 @@ export default function ExploracionLocal() {
 
             <div className="local-legend">
               <div><i className="eps" /> EPS de referencia</div>
-              <div><i className="visited" /> Zonas incluidas</div>
-              <div><i className="excluded" /> Zonas excluidas</div>
-              <div><i className="route" /> Secuencia TSP</div>
-              {mapView === "network" && <div><i className="edge" /> Conexiones locales</div>}
-              {mapView === "network" && <div><i className="weight" /> Valor por tramo</div>}
-              {mapView === "traversal" && <div><i className="edge" /> Recorrido sobre conexiones logicas</div>}
-              {mapView === "backtracking" && <div><i className="edge" /> Secuencia logica bajo restricciones</div>}
+              {mapView === "network" ? (
+                <>
+                  <div><i className="visited" /> Zonas a atender</div>
+                  <div><i className="excluded" /> Zonas excluidas</div>
+                  <div><i className="route" /> Secuencia propuesta</div>
+                </>
+              ) : (
+                <>
+                  <div><i className="destination" /> Zona destino</div>
+                  <div><i className="route" /> Camino recomendado</div>
+                </>
+              )}
             </div>
           </div>
 
           <article className="panel local-summary-panel">
             <h3 className="panel-title">Resumen local</h3>
             <p className="panel-subtitle">
-              Secuencia calculada con las zonas incluidas del sector.
+              Propuesta operativa de atención para las zonas del sector.
             </p>
 
-            <div className="local-summary-groups">
-              <section className="local-summary-group">
-                <strong>Sector seleccionado</strong>
-                <div className="local-summary-grid compact">
+            <div className="local-summary-groups" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* 1. Sector y EPS de referencia */}
+              <section className="local-summary-group" style={{ background: 'var(--bg-surface-soft)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-soft)' }}>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem', display: 'block', marginBottom: '8px' }}>Información del sector</strong>
+                <div className="local-summary-grid compact" style={{ gap: '10px' }}>
                   <div>
                     <span>Sector</span>
                     <strong>{selectedSector?.nombre || "No disponible"}</strong>
                   </div>
                   <div>
-                    <span>Zonas incluidas</span>
-                    <strong>{activeNodeCount}</strong>
+                    <span>Zonas a atender</span>
+                    <strong>{displayedNodeCount}</strong>
                   </div>
                   <div>
                     <span>Zonas excluidas</span>
-                    <strong>{excludedNodeCount}</strong>
-                  </div>
-                  <div>
-                    <span>Criterio</span>
-                    <strong>{criterionInfo.label}</strong>
-                  </div>
-                  <div>
-                    <span>Recorrido estimado</span>
-                    <strong>{routePoints.length > 1 ? formatWeight(tspResult.totalDistance, criterion) : "Sin secuencia"}</strong>
-                  </div>
-                  <div>
-                    <span>Camino minimo</span>
-                    <strong>
-                      {dijkstraPayload?.summary
-                        ? formatDijkstraWeight(dijkstraPayload.summary.totalWeight, criterion)
-                        : "Sin camino"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Recorrido logico</span>
-                    <strong>
-                      {traversalPayload?.summary
-                        ? `${traversalPayload.summary.visitedNodes}/${traversalPayload.summary.totalNodes}`
-                        : "Sin recorrido"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Backtracking</span>
-                    <strong>
-                      {backtrackingPayload?.summary
-                        ? `${backtrackingPayload.summary.visitedDestinations} destino(s)`
-                        : "Sin secuencia"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>EPS de referencia</span>
-                    <strong>{selectedOrigin?.prestador || "No disponible"}</strong>
+                    <strong>{displayedExcludedNodeCount}</strong>
                   </div>
                 </div>
               </section>
 
-              <section className="local-summary-group">
-                <strong>Secuencia recomendada</strong>
-                <div className="local-summary-grid compact">
-                  <div>
-                    <span>Inicio</span>
-                    <strong>{originNode?.nombre || "No disponible"}</strong>
-                  </div>
-                  <div>
-                    <span>Primera zona</span>
-                    <strong>{sequenceNodes[0]?.nombre || "No disponible"}</strong>
-                  </div>
-                  <div>
-                    <span>Última zona</span>
-                    <strong>{sequenceNodes[sequenceNodes.length - 1]?.nombre || "No disponible"}</strong>
-                  </div>
-                  <div>
-                    <span>Zonas en secuencia</span>
-                    <strong>{sequenceNodes.length}</strong>
-                  </div>
-                </div>
-              </section>
-
-              <section className="local-summary-group">
-                <strong>Cobertura local</strong>
-                <div className="local-summary-grid compact">
-                  <div>
-                    <span>Zonas incluidas</span>
-                    <strong>{activeNodeCount}</strong>
-                  </div>
-                  <div>
-                    <span>Zonas excluidas</span>
-                    <strong>{excludedNodeCount}</strong>
-                  </div>
-                  <div>
-                    <span>Alternativas evaluadas</span>
-                    <strong>{tspResult.exploredStates}</strong>
-                  </div>
-                  <div>
-                    <span>Estados en cache</span>
-                    <strong>{tspResult.cacheHits}</strong>
-                  </div>
-                  <div>
-                    <span>Conexiones evaluadas</span>
-                    <strong>{localEdgeCount}</strong>
-                  </div>
-                  <div>
-                    <span>Relajaciones Dijkstra</span>
-                    <strong>{dijkstraPayload?.summary?.relaxedEdges || 0}</strong>
-                  </div>
-                  <div>
-                    <span>Aristas de recorrido</span>
-                    <strong>{traversalPayload?.summary?.treeEdges || 0}</strong>
-                  </div>
-                  <div>
-                    <span>Podas Backtracking</span>
-                    <strong>{backtrackingPayload?.summary?.prunedBranches || 0}</strong>
-                  </div>
-                  <div>
-                    <span>Retrocesos</span>
-                    <strong>{backtrackingPayload?.summary?.backtracks || 0}</strong>
-                  </div>
+              {/* 2. Estimación principal de la ruta */}
+              <section className="local-summary-group" style={{ background: 'var(--bg-surface-soft)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-soft)' }}>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem', display: 'block', marginBottom: '8px' }}>Resultado principal</strong>
+                <div className="local-summary-grid compact" style={{ gap: '10px' }}>
+                  {/* Recorrido estimado (TSP / Road) */}
+                  {(mapView === "network" || mapView === "road") && (
+                    <>
+                      <div>
+                        <span>{resultMetricLabel}</span>
+                        <strong>{routePoints.length > 1 ? formatWeight(tspResult.totalDistance, criterion) : "Sin secuencia"}</strong>
+                      </div>
+                      <div>
+                        <span>Zonas ordenadas</span>
+                        <strong>{sequenceNodes.length}</strong>
+                      </div>
+                    </>
+                  )}
+                  {mapView === "dijkstra" && hasValidDijkstraPath && (
+                    <>
+                      <div>
+                        <span>{resultMetricLabel}</span>
+                        <strong>
+                          {formatDijkstraWeight(dijkstraPayload.summary.totalWeight, criterion)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Zonas en el camino</span>
+                        <strong>{dijkstraPayload?.path?.length || 0}</strong>
+                      </div>
+                    </>
+                  )}
+                  {mapView === "dijkstra" && showDijkstraNoConnection && (
+                    <div className="local-no-connection">
+                      <strong>No se encontró camino operativo para esta zona.</strong>
+                      <span>
+                        La zona tiene coordenadas, pero no está conectada con la EPS dentro de la
+                        red operativa actual. Prueba otra zona del sector o revisa la conectividad
+                        del grupo.
+                      </span>
+                      <small>Zona destino: {selectedTarget?.nombre || "No disponible"}</small>
+                    </div>
+                  )}
+                  {/* Recorrido por niveles (Traversal) */}
+                  {mapView === "traversal" && (
+                    <>
+                      <div>
+                        <span>Recorrido lógico</span>
+                        <strong>
+                          {traversalPayload?.summary
+                            ? `${traversalPayload.summary.visitedNodes}/${traversalPayload.summary.totalNodes} zonas`
+                            : "Sin recorrido"}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Tipo de recorrido</span>
+                        <strong>{traversalAlgorithm === "bfs" ? "Por niveles (BFS)" : "En profundidad (DFS)"}</strong>
+                      </div>
+                    </>
+                  )}
+                  {/* Secuencia con restricciones (Backtracking) */}
+                  {mapView === "backtracking" && (
+                    <>
+                      <div>
+                        <span>Backtracking</span>
+                        <strong>
+                          {backtrackingPayload?.summary
+                            ? `${backtrackingPayload.summary.visitedDestinations} zona(s)`
+                            : "Sin secuencia"}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Estado</span>
+                        <strong>{backtrackingStatus === "success" ? "Factible" : "No factible"}</strong>
+                      </div>
+                    </>
+                  )}
                 </div>
               </section>
             </div>
 
-            <div className="local-explanation-card">
+            {/* 3. Mensajes Explicativos y Cobertura */}
+            <div className="local-explanation-card" style={{ marginTop: '16px' }}>
               <strong>EPS de referencia</strong>
               <p>
                 {selectedOrigin
@@ -1315,81 +1291,82 @@ export default function ExploracionLocal() {
             </div>
 
             {epsRequiresValidation(selectedOriginCoverage) && (
-              <div className="territory-route-status warning">
+              <div className="local-route-status warning" style={{ width: '100%', display: 'block', margin: '12px 0' }}>
                 <strong>Validación operativa requerida</strong>
-                <span>La EPS de referencia debe revisarse antes de iniciar el recorrido.</span>
+                <span style={{ display: 'block', fontWeight: 'normal', marginTop: '4px' }}>La EPS de referencia debe revisarse antes de iniciar el recorrido.</span>
               </div>
             )}
 
-            {excludedNodeCount > 0 && (
+            {displayedExcludedNodeCount > 0 && (
               <p className="territory-context-note">
                 Algunas zonas pueden excluirse por falta de coordenadas o por límites del cálculo.
               </p>
             )}
 
-            <div className="local-explanation-card">
-              <strong>Resumen del recorrido</strong>
-              <p>
-                {sequenceNodes.length
-                  ? `La secuencia parte de ${originNode?.nombre} y ordena ${sequenceNodes.length} zona(s) del sector, priorizando ${criterionInfo.label}.`
-                  : "Selecciona al menos una zona para calcular la secuencia local."}
-              </p>
-            </div>
-
-            {dijkstraPayload?.metadata && (
+            {/* Resumen dinámico según la vista activa */}
+            {(mapView === "network" || mapView === "road") && (
               <div className="local-explanation-card">
-                <strong>Conexion logica optimizada</strong>
+                <strong>Resumen del recorrido</strong>
+                <p>
+                  {sequenceNodes.length
+                    ? `La secuencia óptima parte de ${originNode?.nombre} y ordena ${sequenceNodes.length} zona(s) del sector, priorizando ${criterionInfo.label}.`
+                    : "Selecciona al menos una zona para calcular la secuencia local."}
+                </p>
+              </div>
+            )}
+
+            {mapView === "dijkstra" && dijkstraPayload?.metadata && (
+              <div className="local-explanation-card">
+                <strong>Conexión recomendada</strong>
                 <p>
                   {dijkstraPayload.status === "success"
-                    ? `Camino de ${dijkstraPayload.path.length} nodo(s), calculado por ${criterionInfo.label}.`
-                    : "No existe una conexion entre el origen y el destino dentro del grafo logico seleccionado."}
+                    ? `Camino recomendado de ${dijkstraPayload.path.length} zona(s), calculado para priorizar ${criterionInfo.label}.`
+                    : "No hay camino operativo disponible con los datos actuales."}
                 </p>
-                <span>{dijkstraPayload.metadata.weightField}</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Prioridad: {criterionInfo.label}</span>
               </div>
             )}
 
-            {traversalPayload?.metadata && (
+            {mapView === "traversal" && traversalPayload?.metadata && (
               <div className="local-explanation-card">
-                <strong>Recorrido sobre conexiones logicas</strong>
+                <strong>Recorrido propuesto</strong>
                 <p>
                   {traversalPayload.unreachableNodes?.length
-                    ? `Se visitaron ${traversalPayload.summary.visitedNodes} de ${traversalPayload.summary.totalNodes} zona(s).`
-                    : `Se visitaron ${traversalPayload.summary.visitedNodes} zona(s) desde ${traversalPayload.origin.name}.`}
+                    ? `Se visitaron ${traversalPayload.summary.visitedNodes} de ${traversalPayload.summary.totalNodes} zona(s) mediante búsqueda en grafo.`
+                    : `Se visitaron todas las ${traversalPayload.summary.visitedNodes} zona(s) desde ${traversalPayload.origin.name}.`}
                 </p>
-                <span>{traversalPayload.algorithm.toUpperCase()}</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Búsqueda: {traversalAlgorithm === "bfs" ? "Por niveles (BFS)" : "En profundidad (DFS)"}</span>
               </div>
             )}
 
-            {backtrackingPayload?.metadata && (
+            {mapView === "backtracking" && backtrackingPayload?.metadata && (
               <div className="local-explanation-card">
-                <strong>Secuencia logica bajo restricciones</strong>
+                <strong>Secuencia con restricciones operativas</strong>
                 <p>
                   {backtrackingPayload.feasible
-                    ? `Se seleccionaron ${backtrackingPayload.summary.visitedDestinations} destino(s), con ${backtrackingPayload.summary.prunedBranches} poda(s) y ${backtrackingPayload.summary.backtracks} retroceso(s).`
-                    : "No se encontro una secuencia que cumpla las restricciones seleccionadas."}
+                    ? `Se seleccionaron ${backtrackingPayload.summary.visitedDestinations} zona(s) que cumplen con los límites de recursos establecidos.`
+                    : "No se encontró una secuencia factible que cumpla con todas las restricciones especificadas."}
                 </p>
-                <span>{backtrackingPayload.objective}</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Restricciones aplicadas</span>
               </div>
             )}
 
-            <p className="territory-context-note">
-              La secuencia es una propuesta de apoyo. En sectores grandes puede priorizar zonas
-              representativas para mantener el cálculo manejable.
-            </p>
+            {/* 4. Secuencia Recomendada (Listas de Rutas) - Mostrar solo si aplica */}
+            {(mapView === "network" || mapView === "road") && sequenceNodes.length > 0 && (
+              <div className="local-route-list" style={{ marginTop: '16px' }}>
+                <span>Secuencia propuesta</span>
+                {sequenceNodes.map((node, index) => (
+                  <button key={node.id} type="button" onClick={() => toggleNode(node)}>
+                    <strong>{index + 1}. {node.nombre}</strong>
+                    <small>{node.interrupciones?.toLocaleString("es-PE") || 0} interrupciones</small>
+                  </button>
+                ))}
+              </div>
+            )}
 
-            <div className="local-route-list">
-              <span>Secuencia propuesta</span>
-              {sequenceNodes.map((node, index) => (
-                <button key={node.id} type="button" onClick={() => toggleNode(node)}>
-                  <strong>{index + 1}. {node.nombre}</strong>
-                  <small>{node.interrupciones?.toLocaleString("es-PE") || 0} interrupciones</small>
-                </button>
-              ))}
-            </div>
-
-            {traversalPayload?.order?.length > 0 && (
-              <div className="local-route-list">
-                <span>Orden de recorrido {traversalPayload.algorithm.toUpperCase()}</span>
+            {mapView === "traversal" && traversalPayload?.order?.length > 0 && (
+              <div className="local-route-list" style={{ marginTop: '16px' }}>
+                <span>Orden de recorrido ({traversalAlgorithm === "bfs" ? "Por niveles" : "En profundidad"})</span>
                 {traversalPayload.order.map((item) => (
                   <button key={item.nodeId} type="button">
                     <strong>{item.position}. {item.name}</strong>
@@ -1403,9 +1380,9 @@ export default function ExploracionLocal() {
               </div>
             )}
 
-            {backtrackingPayload?.sequence?.length > 0 && (
-              <div className="local-route-list">
-                <span>Secuencia Backtracking</span>
+            {mapView === "backtracking" && backtrackingPayload?.sequence?.length > 0 && (
+              <div className="local-route-list" style={{ marginTop: '16px' }}>
+                <span>Secuencia con restricciones operativas</span>
                 {backtrackingPayload.sequence.map((item) => (
                   <button key={item.nodeId} type="button">
                     <strong>{item.order}. {item.nombre}</strong>
@@ -1416,6 +1393,12 @@ export default function ExploracionLocal() {
                 ))}
               </div>
             )}
+
+            <p className="territory-context-note">
+              La secuencia es una propuesta de apoyo. En sectores grandes puede priorizar zonas
+              representativas para mantener el cálculo manejable.
+            </p>
+
           </article>
         </section>
       </section>

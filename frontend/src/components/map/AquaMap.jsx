@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleMarker,
   GeoJSON,
@@ -88,11 +88,20 @@ function fitMapToPoints(map, points, options = {}) {
   });
 }
 
-function MapViewportController({ focusKey, focusPoints, routeKey, routePoints }) {
+function MapViewportController({
+  focusKey,
+  focusPoints,
+  routeKey,
+  routePoints,
+  centerRequestKey,
+  showControls,
+  layoutKey,
+}) {
   const map = useMap();
   const controlsRef = useRef(null);
   const lastFocusKeyRef = useRef("");
   const lastRouteKeyRef = useRef("");
+  const lastCenterRequestKeyRef = useRef(0);
   const userHasInteractedRef = useRef(false);
 
   useEffect(() => {
@@ -113,7 +122,7 @@ function MapViewportController({ focusKey, focusPoints, routeKey, routePoints })
   useEffect(() => {
     if (!focusKey || focusKey === lastFocusKeyRef.current) return;
     lastFocusKeyRef.current = focusKey;
-    if (userHasInteractedRef.current) return;
+    userHasInteractedRef.current = false;
     fitMapToPoints(map, focusPoints);
   }, [focusKey, focusPoints, map]);
 
@@ -125,6 +134,29 @@ function MapViewportController({ focusKey, focusPoints, routeKey, routePoints })
     }
   }, [map, routeKey, routePoints]);
 
+  useEffect(() => {
+    if (!centerRequestKey || centerRequestKey === lastCenterRequestKeyRef.current) return;
+    lastCenterRequestKeyRef.current = centerRequestKey;
+    userHasInteractedRef.current = false;
+    fitMapToPoints(
+      map,
+      routePoints.length ? routePoints : focusPoints,
+      routePoints.length ? { maxZoom: 13 } : {}
+    );
+  }, [centerRequestKey, focusPoints, map, routePoints]);
+
+  useEffect(() => {
+    const refreshSize = () => map.invalidateSize({ pan: false });
+    const frame = window.requestAnimationFrame(refreshSize);
+    const timer = window.setTimeout(refreshSize, 180);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [layoutKey, map]);
+
+  if (!showControls) return null;
+
   return (
     <div ref={controlsRef} className="map-action-controls leaflet-control">
       <button
@@ -135,7 +167,7 @@ function MapViewportController({ focusKey, focusPoints, routeKey, routePoints })
           fitMapToPoints(map, focusPoints);
         }}
       >
-        Ver sector
+        Centrar sector
       </button>
       <button
         type="button"
@@ -145,7 +177,7 @@ function MapViewportController({ focusKey, focusPoints, routeKey, routePoints })
         }}
         disabled={!routePoints.length}
       >
-        Ver secuencia
+        Mostrar secuencia
       </button>
     </div>
   );
@@ -163,17 +195,24 @@ export default function AquaMap({
   districtPoints = [],
   activeCenter = null,
   routePoints = [],
+  focusRoutePoints = null,
   routeGeoJson = null,
   routeColor = "#2563eb",
   showConceptRouteFallback = true,
   graphEdges = [],
   highlightedPathEdges = [],
   showEdgeWeights = false,
+  showHighlightedEdgeLabels = false,
   edgeWeightLabel = "Peso",
   showDistrictMarkers = true,
   onDistrictClick,
   height = 520,
+  headerMapActions = false,
+  mapExpanded = false,
+  onToggleMapExpanded,
+  viewportLayoutKey = "",
 }) {
+  const [centerRequestKey, setCenterRequestKey] = useState(0);
   const districtMap = useMemo(
     () => new Map(districtPoints.map((district) => [district.id, district])),
     [districtPoints]
@@ -197,7 +236,9 @@ export default function AquaMap({
     () => geoJsonLatLngs(routeGeoJson),
     [routeGeoJson]
   );
-  const routeFocusPoints = realRoutePoints.length ? realRoutePoints : routePoints;
+  const routeFocusPoints = realRoutePoints.length
+    ? realRoutePoints
+    : focusRoutePoints || routePoints;
   const routePointSignature = useMemo(
     () =>
       validLatLngs(routePoints)
@@ -227,13 +268,38 @@ export default function AquaMap({
 
   return (
     <article className="panel" style={{ padding: "0", overflow: "hidden" }}>
-      <div style={{ borderBottom: "1px solid #d9e2ec", padding: "16px 18px" }}>
-        <h3 className="panel-title" style={{ marginBottom: "4px" }}>
-          {mapTitle}
-        </h3>
-        <p className="panel-subtitle" style={{ marginBottom: 0 }}>
-          {mapSubtitle}
-        </p>
+      <div className="aqua-map-card-header">
+        <div>
+          <h3 className="panel-title" style={{ marginBottom: "4px" }}>
+            {mapTitle}
+          </h3>
+          <p className="panel-subtitle" style={{ marginBottom: 0 }}>
+            {mapSubtitle}
+          </p>
+        </div>
+        {headerMapActions && (
+          <div className="dashboard-map-toolbar aqua-map-header-actions">
+            <button
+              type="button"
+              aria-label={mapExpanded ? "Reducir mapa" : "Ampliar mapa"}
+              title={mapExpanded ? "Reducir mapa" : "Ampliar mapa"}
+              aria-pressed={mapExpanded}
+              onClick={onToggleMapExpanded}
+            >
+              <span className="toolbar-icon toolbar-icon-expand" aria-hidden="true" />
+              <span>{mapExpanded ? "Reducir" : "Ampliar"}</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Centrar sector y secuencia"
+              title="Centrar"
+              onClick={() => setCenterRequestKey((current) => current + 1)}
+            >
+              <span className="toolbar-icon toolbar-icon-target" aria-hidden="true" />
+              <span>Centrar</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ height: `${height}px`, width: "100%" }}>
@@ -248,6 +314,9 @@ export default function AquaMap({
             focusPoints={pointsForBounds}
             routeKey={routeKey}
             routePoints={routeFocusPoints}
+            centerRequestKey={centerRequestKey}
+            showControls={!headerMapActions}
+            layoutKey={viewportLayoutKey}
           />
 
           {graphEdges.map((edge) => {
@@ -270,6 +339,18 @@ export default function AquaMap({
                 {showEdgeWeights && (
                   <Tooltip permanent direction="center" opacity={0.9}>
                     {edge.weightLabel || edge.weight}
+                  </Tooltip>
+                )}
+                {showHighlightedEdgeLabels && isHighlighted && edge.weightLabel && (
+                  <Tooltip
+                    permanent
+                    direction="center"
+                    offset={[0, -5]}
+                    opacity={0.96}
+                    interactive={false}
+                    className="sequence-edge-weight-tooltip"
+                  >
+                    {edge.weightLabel}
                   </Tooltip>
                 )}
                 <Popup>
