@@ -88,6 +88,145 @@ export function buildDashboardGeoAudit(districts = []) {
   };
 }
 
+function normalizeTerritoryPart(value) {
+  return repairText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[-'`´]/g, " ")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function canonicalDistrictKey(district = {}) {
+  const ubigeo = normalizeUbigeo(district.ubigeo);
+  if (ubigeo.length === 6) return `ubigeo:${ubigeo}`;
+  return `territory:${[
+    normalizeTerritoryPart(district.departamento),
+    normalizeTerritoryPart(district.provincia),
+    normalizeTerritoryPart(district.nombre || district.distrito),
+  ].join("|")}`;
+}
+
+function pickCanonicalDistrict(records) {
+  return [...records].sort((a, b) => {
+    const aCenter = isValidCoordinatePair(a.center) ? 1 : 0;
+    const bCenter = isValidCoordinatePair(b.center) ? 1 : 0;
+    return (
+      bCenter - aCenter ||
+      (b.interrupciones || 0) - (a.interrupciones || 0) ||
+      String(a.id).localeCompare(String(b.id), "es")
+    );
+  })[0];
+}
+
+function weightedByInterruptions(records, field, totalInterruptions) {
+  if (!totalInterruptions) return 0;
+  return (
+    records.reduce(
+      (acc, item) => acc + (Number(item[field]) || 0) * (Number(item.interrupciones) || 0),
+      0
+    ) / totalInterruptions
+  );
+}
+
+export function consolidateDashboardDistrictsAndGroups(districts = [], groups = []) {
+  const buckets = new Map();
+
+  for (const district of districts) {
+    const key = canonicalDistrictKey(district);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(district);
+  }
+
+  const oldToCanonicalId = new Map();
+  const consolidatedDistricts = [...buckets.entries()].map(([canonicalKey, records]) => {
+    const primary = pickCanonicalDistrict(records);
+    const totalInterruptions = records.reduce(
+      (acc, item) => acc + (Number(item.interrupciones) || 0),
+      0
+    );
+    const totalConnections = records.reduce(
+      (acc, item) => acc + (Number(item.conexiones_afectadas) || 0),
+      0
+    );
+    const totalEstimatedPeople = records.reduce(
+      (acc, item) => acc + (Number(item.personas_afectadas_estimadas) || 0),
+      0
+    );
+
+    for (const record of records) oldToCanonicalId.set(record.id, primary.id);
+
+    return {
+      ...primary,
+      canonicalKey,
+      duplicateSourceIds: records.map((record) => record.id),
+      duplicateCount: records.length,
+      interrupciones: totalInterruptions,
+      conexiones_afectadas: totalConnections,
+      unidades_afectadas: records.reduce(
+        (acc, item) => acc + (Number(item.unidades_afectadas) || 0),
+        0
+      ),
+      camiones_puntos: records.reduce((acc, item) => acc + (Number(item.camiones_puntos) || 0), 0),
+      personas_afectadas_estimadas: totalEstimatedPeople,
+      conexiones_afectadas_evento_max: Math.max(
+        ...records.map((item) => Number(item.conexiones_afectadas_evento_max) || 0)
+      ),
+      duracion_promedio_horas: Number(
+        weightedByInterruptions(records, "duracion_promedio_horas", totalInterruptions).toFixed(2)
+      ),
+      duracion_maxima_horas: Math.max(
+        ...records.map((item) => Number(item.duracion_maxima_horas) || 0)
+      ),
+      primera_interrupcion: records
+        .map((item) => item.primera_interrupcion)
+        .filter(Boolean)
+        .sort()[0],
+      ultima_actualizacion: records
+        .map((item) => item.ultima_actualizacion)
+        .filter(Boolean)
+        .sort()
+        .at(-1),
+      center: isValidCoordinatePair(primary.center) ? primary.center : null,
+    };
+  });
+
+  const assignedDistricts = new Set();
+  const consolidatedGroups = groups.map((group) => {
+    const canonicalIds = [];
+    for (const id of group.zona_ids || []) {
+      const canonicalId = oldToCanonicalId.get(id) || id;
+      if (!canonicalId || canonicalIds.includes(canonicalId) || assignedDistricts.has(canonicalId)) {
+        continue;
+      }
+      canonicalIds.push(canonicalId);
+      assignedDistricts.add(canonicalId);
+    }
+    return {
+      ...group,
+      zona_ids: canonicalIds,
+      duplicate_zona_ids_removed: (group.zona_ids || []).length - canonicalIds.length,
+    };
+  });
+
+  const duplicatesDetected = [...buckets.values()].filter((records) => records.length > 1);
+
+  return {
+    districts: consolidatedDistricts,
+    groups: consolidatedGroups,
+    stats: {
+      before: districts.length,
+      after: consolidatedDistricts.length,
+      duplicateBuckets: duplicatesDetected.length,
+      duplicateRecordsRemoved: districts.length - consolidatedDistricts.length,
+      canonicalIdentifier: "UBIGEO normalizado de 6 digitos",
+      fallbackIdentifier: "departamento + provincia + distrito normalizados",
+    },
+  };
+}
+
 export function buildRelatedEpsContext({ filteredDistricts = [], epsOrigins = [], limit = 8 }) {
   const grouped = new Map();
 

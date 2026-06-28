@@ -1,4 +1,5 @@
 ﻿import { useMemo, useState } from "react";
+import { useId, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
 import DashboardMiniMap from "../components/dashboard/DashboardMiniMap";
@@ -15,9 +16,9 @@ import {
   sanitizeDashboardFilters,
 } from "../utils/dashboardFilters";
 import {
-  buildDashboardGeoAudit,
   buildRelatedEpsContext,
   buildSelectedEpsContext,
+  consolidateDashboardDistrictsAndGroups,
   repairText,
 } from "../utils/dashboardGeo";
 
@@ -46,6 +47,146 @@ const compactFormatter = new Intl.NumberFormat("es-PE", {
 
 function isActive(value) {
   return Boolean(value && value !== "todos");
+}
+
+function normalizeSearchText(value) {
+  return repairText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function DashboardCombobox({ label, value, allLabel, options, onChange }) {
+  const listId = useId();
+  const rootRef = useRef(null);
+  const selectedOption = options.find((option) => option.value === value);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const allOptions = useMemo(
+    () => [{ value: "todos", label: allLabel }, ...options],
+    [allLabel, options]
+  );
+  const visibleOptions = useMemo(() => {
+    const normalizedQuery = normalizeSearchText(query);
+    if (!normalizedQuery) return allOptions;
+    return allOptions.filter((option) =>
+      normalizeSearchText(option.label).includes(normalizedQuery)
+    );
+  }, [allOptions, query]);
+
+  function selectOption(option) {
+    if (!option) return;
+    onChange(option.value);
+    setQuery("");
+    setOpen(false);
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setOpen(false);
+      setQuery("");
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((index) => Math.min(index + 1, visibleOptions.length - 1));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((index) => Math.max(index - 1, 0));
+      return;
+    }
+    if (event.key === "Enter" && open) {
+      event.preventDefault();
+      selectOption(visibleOptions[activeIndex]);
+    }
+  }
+
+  return (
+    <label className="control-group dashboard-combobox" ref={rootRef}>
+      <span className="control-label">{label}</span>
+      <div
+        className="dashboard-combobox-control"
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+        }}
+      >
+        <input
+          type="text"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          className="control-select dashboard-combobox-input"
+          value={open ? query : selectedOption?.label || allLabel}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActiveIndex(0);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            setQuery("");
+            setActiveIndex(0);
+            setOpen(true);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        {isActive(value) && (
+          <button
+            type="button"
+            className="dashboard-combobox-clear"
+            aria-label={`Limpiar ${label}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => selectOption(allOptions[0])}
+          >
+            ×
+          </button>
+        )}
+        <button
+          type="button"
+          className="dashboard-combobox-toggle"
+          aria-label={`Abrir ${label}`}
+          aria-expanded={open}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setActiveIndex(0);
+            setOpen((current) => !current);
+          }}
+        >
+          ▾
+        </button>
+        {open && (
+          <div className="dashboard-combobox-menu" id={listId} role="listbox">
+            {visibleOptions.length ? (
+              visibleOptions.map((option, index) => (
+                <button
+                  type="button"
+                  key={option.value}
+                  role="option"
+                  aria-selected={option.value === value}
+                  className={index === activeIndex ? "active" : ""}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectOption(option)}
+                >
+                  {repairText(option.label)}
+                </button>
+              ))
+            ) : (
+              <span className="dashboard-combobox-empty">Sin coincidencias</span>
+            )}
+          </div>
+        )}
+      </div>
+    </label>
+  );
 }
 
 function formatNumber(value) {
@@ -80,19 +221,6 @@ function badgeClass(level) {
   if (level === "alta") return "badge high";
   if (level === "media") return "badge medium";
   return "badge low";
-}
-
-function distanceKm(center, origin) {
-  if (!center || !origin) return Infinity;
-  const [lat1, lon1] = center.map((item) => (Number(item) * Math.PI) / 180);
-  const lat2 = (Number(origin.lat) * Math.PI) / 180;
-  const lon2 = (Number(origin.lon) * Math.PI) / 180;
-  const dLat = lat2 - lat1;
-  const dLon = lon2 - lon1;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function weightedAverage(districts, field) {
@@ -138,10 +266,15 @@ export default function DashboardOperativo() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const metadata = useMemo(() => aquaRutaData.metadata || {}, []);
-  const allDistricts = useMemo(() => aquaRutaData.districts || [], []);
-  const groupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
+  const rawDistricts = useMemo(() => aquaRutaData.districts || [], []);
+  const rawGroupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
+  const canonicalDashboardData = useMemo(
+    () => consolidateDashboardDistrictsAndGroups(rawDistricts, rawGroupedZones),
+    [rawDistricts, rawGroupedZones]
+  );
+  const allDistricts = canonicalDashboardData.districts;
+  const groupedZones = canonicalDashboardData.groups;
   const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
-  const operationalRoutes = useMemo(() => aquaRutaData.operationalRoutes || {}, []);
   const [filters, setFilters] = useState(() =>
     sanitizeDashboardFilters(allDistricts, groupedZones, loadStoredFilters(searchParams))
   );
@@ -272,9 +405,6 @@ export default function DashboardOperativo() {
   const criticalDistricts = filteredDistricts.filter(
     (district) => district.criticidad === "critica"
   );
-  const highPriorityDistricts = filteredDistricts.filter(
-    (district) => district.criticidad === "critica" || district.criticidad === "alta"
-  );
   const totalInterruptions = filteredDistricts.reduce(
     (acc, item) => acc + (item.interrupciones || 0),
     0
@@ -288,15 +418,6 @@ export default function DashboardOperativo() {
     0
   );
   const averageDuration = weightedAverage(filteredDistricts, "duracion_promedio_horas");
-  const routeDistrictIds = useMemo(() => {
-    const ids = new Set();
-    for (const scenario of Object.values(operationalRoutes)) {
-      for (const district of scenario?.dfs?.order || []) ids.add(district.id);
-      for (const district of scenario?.bfs?.order || []) ids.add(district.id);
-      for (const district of scenario?.backtracking?.best_order || []) ids.add(district.id);
-    }
-    return ids;
-  }, [operationalRoutes]);
 
   const originCoverage = useMemo(() => {
     return buildRelatedEpsContext({ filteredDistricts, epsOrigins });
@@ -312,93 +433,14 @@ export default function DashboardOperativo() {
     [epsOrigins, filteredDistricts, filters.eps]
   );
   const selectedMapOriginsWithCoordinates = selectedEpsContext.mapOrigins;
-  const selectedEpsWithoutCoordinates =
-    isActive(filters.eps) && selectedEpsContext.missingReference;
   const [mapResetKey, setMapResetKey] = useState(0);
-  const geoAudit = useMemo(() => buildDashboardGeoAudit(filteredDistricts), [filteredDistricts]);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [showMapLegend, setShowMapLegend] = useState(true);
 
   const selectedDistrictGroup = useMemo(() => {
     if (!selectedDistrict) return null;
     return groupedZones.find((group) => (group.zona_ids || []).includes(selectedDistrict.id));
   }, [groupedZones, selectedDistrict]);
-
-  const alerts = useMemo(() => {
-    const nearestOriginForDistrict = (district) => {
-      return epsOrigins
-        .map((origin) => ({ origin, distance: distanceKm(district.center, origin) }))
-        .sort((a, b) => a.distance - b.distance)[0];
-    };
-    const items = [];
-    const oversizedGroup = visibleGroups.find(
-      (group) => group.visibleZones > GROUP_SECTOR_THRESHOLD
-    );
-    const noNearbyOrigin = criticalDistricts
-      .map((district) => ({ district, nearest: nearestOriginForDistrict(district) }))
-      .filter((item) => !Number.isFinite(item.nearest?.distance) || item.nearest.distance > 35)[0];
-    const routeGap = highPriorityDistricts.find((district) => !routeDistrictIds.has(district.id));
-    const missingCenter = geoAudit.withoutCoordinates;
-
-    if (oversizedGroup) {
-      items.push({
-        id: "grupo-requiere-sectorizacion",
-        level: oversizedGroup.criticidad || "alta",
-        title: "Grupo operativo supera el tamano recomendado",
-        body: `${oversizedGroup.nombre} contiene ${formatNumber(
-          oversizedGroup.visibleZones
-        )} distritos del contexto y debe revisarse en Sectorizacion.`,
-        action: "Sectorizar grupo",
-        path: buildDashboardPath("/sectorizacion", filters, { grupo: oversizedGroup.id }),
-      });
-    }
-    if (noNearbyOrigin) {
-      items.push({
-        id: "eps-lejana",
-        level: "critica",
-        title: "Distrito critico sin EPS cercana",
-        body: `${repairText(
-          noNearbyOrigin.district.nombre
-        )} requiere validar una EPS de referencia antes de planificar atencion.`,
-        action: "Ver en mapa operativo",
-        path: buildDashboardPath("/mapa", filters, {
-          modo: "ruta",
-          distrito: noNearbyOrigin.district.id,
-        }),
-      });
-    }
-    if (routeGap) {
-      items.push({
-        id: "ruta-logica-pendiente",
-        level: "alta",
-        title: "Distrito prioritario sin recorrido precalculado",
-        body: `${repairText(
-          routeGap.nombre
-        )} aparece como prioridad alta o critica, pero no figura en recorridos precalculados.`,
-        action: "Explorar conectividad",
-        path: buildDashboardPath("/exploracion-local", filters, { distrito: routeGap.id }),
-      });
-    }
-    if (missingCenter) {
-      items.push({
-        id: "coordenadas-incompletas",
-        level: "media",
-        title: "Datos geograficos incompletos",
-        body: `${formatNumber(
-          missingCenter
-        )} distritos no pudieron representarse en el mapa.`,
-        action: "Ver distritos",
-        path: buildDashboardPath("/mapa", filters),
-      });
-    }
-    return items;
-  }, [
-    criticalDistricts,
-    epsOrigins,
-    filters,
-    geoAudit,
-    highPriorityDistricts,
-    routeDistrictIds,
-    visibleGroups,
-  ]);
 
   const contextLabel = useMemo(() => {
     const parts = [];
@@ -482,8 +524,7 @@ export default function DashboardOperativo() {
           <div>
             <h2 className="dashboard-title">Dashboard operativo</h2>
             <p className="dashboard-subtitle">
-              Panorama territorial para identificar afectacion, prioridad y siguiente accion con
-              datos trazables del pipeline de AquaRuta.
+              Consulta el estado de las interrupciones, los distritos afectados y los grupos operativos para orientar la atención y planificación.
             </p>
           </div>
           <div className="dashboard-context-panel">
@@ -514,81 +555,53 @@ export default function DashboardOperativo() {
             </button>
           </div>
           <div className="dashboard-filter-grid">
-            <label className="control-group">
-              <span className="control-label">EPS</span>
-              <select
-                className="control-select"
-                value={filters.eps}
-                onChange={(event) => updateFilter("eps", event.target.value)}
-              >
-                <option value="todos">Todas</option>
-                {options.eps.map((eps) => (
-                  <option key={eps} value={eps}>
-                    {repairText(eps)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="control-group">
-              <span className="control-label">Departamento</span>
-              <select
-                className="control-select"
-                value={filters.departamento}
-                onChange={(event) => updateFilter("departamento", event.target.value)}
-              >
-                <option value="todos">Todos</option>
-                {options.departamentos.map((department) => (
-                  <option key={department} value={department}>
-                    {repairText(department)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="control-group">
-              <span className="control-label">Provincia</span>
-              <select
-                className="control-select"
-                value={filters.provincia}
-                onChange={(event) => updateFilter("provincia", event.target.value)}
-              >
-                <option value="todos">Todas</option>
-                {options.provincias.map((province) => (
-                  <option key={province} value={province}>
-                    {repairText(province)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="control-group">
-              <span className="control-label">Distrito</span>
-              <select
-                className="control-select"
-                value={filters.distrito}
-                onChange={(event) => updateFilter("distrito", event.target.value)}
-              >
-                <option value="todos">Todos</option>
-                {options.distritos.map((district) => (
-                  <option key={district.id} value={district.id}>
-                    {repairText(district.nombre)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="control-group">
-              <span className="control-label">Grupo operativo</span>
-              <select
-                className="control-select"
-                value={filters.grupo}
-                onChange={(event) => updateFilter("grupo", event.target.value)}
-              >
-                <option value="todos">Todos</option>
-                {options.grupos.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DashboardCombobox
+              label="EPS"
+              value={filters.eps}
+              allLabel="Todas"
+              options={options.eps.map((eps) => ({ value: eps, label: repairText(eps) }))}
+              onChange={(value) => updateFilter("eps", value)}
+            />
+            <DashboardCombobox
+              label="Departamento"
+              value={filters.departamento}
+              allLabel="Todos"
+              options={options.departamentos.map((department) => ({
+                value: department,
+                label: repairText(department),
+              }))}
+              onChange={(value) => updateFilter("departamento", value)}
+            />
+            <DashboardCombobox
+              label="Provincia"
+              value={filters.provincia}
+              allLabel="Todas"
+              options={options.provincias.map((province) => ({
+                value: province,
+                label: repairText(province),
+              }))}
+              onChange={(value) => updateFilter("provincia", value)}
+            />
+            <DashboardCombobox
+              label="Distrito"
+              value={filters.distrito}
+              allLabel="Todos"
+              options={options.distritos.map((district) => ({
+                value: district.id,
+                label: repairText(district.nombre),
+              }))}
+              onChange={(value) => updateFilter("distrito", value)}
+            />
+            <DashboardCombobox
+              label="Grupo operativo"
+              value={filters.grupo}
+              allLabel="Todos"
+              options={options.grupos.map((group) => ({
+                value: group.id,
+                label: group.nombre,
+              }))}
+              onChange={(value) => updateFilter("grupo", value)}
+            />
           </div>
         </article>
 
@@ -681,7 +694,7 @@ export default function DashboardOperativo() {
               </article>
             )}
 
-            <section className="dashboard-map-grid">
+            <section className={`dashboard-map-grid ${mapExpanded ? "dashboard-map-expanded" : ""}`}>
               <article className="panel dashboard-map-panel">
                 <div className="dashboard-panel-heading">
                   <div>
@@ -690,27 +703,53 @@ export default function DashboardOperativo() {
                       El mapa muestra unicamente distritos compatibles con el contexto activo.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="dashboard-soft-button"
-                    onClick={() => setMapResetKey((value) => value + 1)}
-                  >
-                    Restablecer vista
-                  </button>
-                  <button
-                    type="button"
-                    className="dashboard-soft-button"
-                    onClick={() =>
-                      navigate(
-                        buildDashboardPath("/mapa", filters, {
-                          modo: "ruta",
-                          distrito: rankedDistricts[0]?.id,
-                        })
-                      )
-                    }
-                  >
-                    Ver mapa operativo
-                  </button>
+                  <div className="dashboard-map-toolbar" aria-label="Controles del mapa">
+                    <button
+                      type="button"
+                      aria-label="Restablecer vista del mapa"
+                      title="Restablecer vista"
+                      onClick={() => setMapResetKey((value) => value + 1)}
+                    >
+                      <span className="toolbar-icon toolbar-icon-home" aria-hidden="true" />
+                      <span>Restablecer</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={mapExpanded ? "Reducir mapa" : "Ampliar mapa"}
+                      title={mapExpanded ? "Reducir mapa" : "Ampliar mapa"}
+                      onClick={() => setMapExpanded((current) => !current)}
+                    >
+                      <span className="toolbar-icon toolbar-icon-expand" aria-hidden="true" />
+                      <span>{mapExpanded ? "Reducir" : "Ampliar"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Abrir capas en mapa operativo"
+                      title="Capas"
+                      onClick={() => navigate(buildDashboardPath("/mapa", filters))}
+                    >
+                      <span className="toolbar-icon toolbar-icon-layers" aria-hidden="true" />
+                      <span>Capas</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={showMapLegend ? "Ocultar leyenda" : "Mostrar leyenda"}
+                      title="Leyenda"
+                      onClick={() => setShowMapLegend((current) => !current)}
+                    >
+                      <span className="toolbar-icon toolbar-icon-legend" aria-hidden="true" />
+                      <span>Leyenda</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Centrar selección en el mapa"
+                      title="Centrar selección"
+                      onClick={() => setMapResetKey((value) => value + 1)}
+                    >
+                      <span className="toolbar-icon toolbar-icon-target" aria-hidden="true" />
+                      <span>Centrar</span>
+                    </button>
+                  </div>
                 </div>
                 <DashboardMiniMap
                   districts={mapDistricts}
@@ -718,60 +757,19 @@ export default function DashboardOperativo() {
                   focusKey={mapResetKey}
                   onDistrictClick={openDistrict}
                 />
-                <div className="dashboard-map-legend">
-                  <span className="district">Distrito</span>
-                  <span className="eps">EPS</span>
-                  <span className="critical">Critica</span>
-                  <span className="high">Alta</span>
-                  <span className="medium">Media</span>
-                  <span className="low">Baja</span>
-                </div>
-                {selectedEpsWithoutCoordinates && (
-                  <div className="dashboard-map-note">
-                    La EPS seleccionada no tiene una ubicacion geografica disponible.
+                {showMapLegend && (
+                  <div className="dashboard-map-legend">
+                    <span className="district">Distrito</span>
+                    <span className="eps">EPS</span>
+                    <span className="critical">Critica</span>
+                    <span className="high">Alta</span>
+                    <span className="medium">Media</span>
+                    <span className="low">Baja</span>
                   </div>
                 )}
               </article>
 
               <aside className="dashboard-side-stack">
-                <article className="panel dashboard-alert-panel">
-                  <div className="dashboard-panel-heading">
-                    <div>
-                      <h3 className="panel-title">Alertas operativas</h3>
-                      <p className="panel-subtitle">
-                        Condiciones reales detectadas dentro del contexto.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="dashboard-alert-list">
-                    {alerts.length ? (
-                      alerts.map((alert) => (
-                        <button
-                          type="button"
-                          key={alert.id}
-                          className={`dashboard-alert-card ${alert.level}`}
-                          onClick={() => navigate(alert.path)}
-                        >
-                          <span className="dashboard-alert-level">
-                            {priorityLabels[alert.level] || "INFO"}
-                          </span>
-                          <strong>{alert.title}</strong>
-                          <span>{alert.body}</span>
-                          <small>{alert.action}</small>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="empty-state dashboard-alert-empty">
-                        <strong>Sin alertas operativas</strong>
-                        <span>
-                          No se detectaron condiciones que requieran atencion en el contexto
-                          seleccionado.
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </article>
-
                 <article className="panel">
                   <div className="dashboard-panel-heading">
                     <div>
@@ -779,7 +777,7 @@ export default function DashboardOperativo() {
                       <p className="panel-subtitle">
                         {isActive(filters.eps)
                           ? "Referencia operativa asociada a la EPS filtrada."
-                          : "Sedes referenciales asociadas por EPS o cercania territorial."}
+                          : "EPS asociadas a los distritos del contexto."}
                       </p>
                     </div>
                   </div>
@@ -808,7 +806,7 @@ export default function DashboardOperativo() {
                           {origin.locationType === "referencial"
                             ? " - ubicacion referencial"
                             : origin.locationType === "no_disponible"
-                            ? " - sin ubicacion geografica"
+                            ? " - sin sede registrada"
                             : ""}
                         </small>
                       </button>

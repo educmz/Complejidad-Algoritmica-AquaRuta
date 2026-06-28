@@ -14,6 +14,7 @@ from loaders.demographics_loader import DemographicsLoader
 from builders.dataset_builder import (
     build_dataset_metadata,
     build_districts_summary,
+    consolidate_district_records,
     enrich_districts_with_centers,
     strip_internal_fields,
     save_json,
@@ -108,6 +109,8 @@ def main():
 
     logger.info("Asignando centers...")
     districts_summary = enrich_districts_with_centers(districts_summary, centers_df)
+    districts_summary, consolidation_report = consolidate_district_records(districts_summary)
+    validation_report["consolidacion_distrital"] = consolidation_report
 
     logger.info("Limpiando campos internos...")
     districts_summary_clean = strip_internal_fields(districts_summary)

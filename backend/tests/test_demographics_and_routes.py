@@ -9,6 +9,7 @@ SRC = ROOT / "backend" / "src"
 sys.path.insert(0, str(SRC))
 
 from builders.dataset_builder import _apply_demographics
+from builders.dataset_builder import consolidate_district_records
 from builders.dataset_builder import enrich_districts_with_centers
 from loaders.district_centers_loader import DistrictCentersLoader
 from services.ors_service import ORSService, RouteConfig
@@ -95,6 +96,52 @@ class DemandFamilyWeightTests(unittest.TestCase):
         result = enrich_districts_with_centers(districts, centers)
 
         self.assertNotIn("center", result[0])
+
+    def test_consolidate_district_records_uses_ubigeo_as_canonical_node(self):
+        records = [
+            {
+                "id": "lima-barranca-ate",
+                "nombre": "Ate",
+                "departamento": "Lima",
+                "provincia": "Barranca",
+                "ubigeo": "150103",
+                "center": None,
+                "interrupciones": 1,
+                "conexiones_afectadas": 158,
+                "conexiones_afectadas_evento_max": 158,
+                "unidades_afectadas": 24,
+                "camiones_puntos": 0,
+                "personas_afectadas_estimadas": 545,
+                "duracion_promedio_horas": 8,
+                "duracion_maxima_horas": 8,
+            },
+            {
+                "id": "lima-lima-ate",
+                "nombre": "Ate",
+                "departamento": "Lima",
+                "provincia": "Lima",
+                "ubigeo": "150103",
+                "center": [-12.026389, -76.921389],
+                "interrupciones": 1264,
+                "conexiones_afectadas": 5078747,
+                "conexiones_afectadas_evento_max": 3101147,
+                "unidades_afectadas": 2262006,
+                "camiones_puntos": 17,
+                "personas_afectadas_estimadas": 10698957,
+                "duracion_promedio_horas": 8.2,
+                "duracion_maxima_horas": 724,
+            },
+        ]
+
+        consolidated, report = consolidate_district_records(records)
+
+        self.assertEqual(report["nodos_antes"], 2)
+        self.assertEqual(report["nodos_despues"], 1)
+        self.assertEqual(report["duplicados_detectados"], 1)
+        self.assertEqual(consolidated[0]["id"], "lima-lima-ate")
+        self.assertEqual(consolidated[0]["interrupciones"], 1265)
+        self.assertEqual(consolidated[0]["conexiones_afectadas"], 5078905)
+        self.assertEqual(consolidated[0]["center"], [-12.026389, -76.921389])
 
     def test_demographic_weight_uses_event_connections_and_household_average(self):
         records = [
