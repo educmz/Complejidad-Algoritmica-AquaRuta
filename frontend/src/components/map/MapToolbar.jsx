@@ -8,7 +8,20 @@ export default function MapToolbar({
   onCenter,
   layersLabel = "Capas",
   centerLabel = "Centrar seleccion",
+  centerBeforeLegend = false,
 }) {
+  const centerButton = onCenter ? (
+    <button
+      type="button"
+      aria-label={centerLabel}
+      title="Centrar seleccion"
+      onClick={onCenter}
+    >
+      <span className="toolbar-icon toolbar-icon-target" aria-hidden="true" />
+      <span>Centrar</span>
+    </button>
+  ) : null;
+
   return (
     <div className="dashboard-map-toolbar" aria-label="Controles del mapa">
       {onToggleExpanded && (
@@ -23,6 +36,7 @@ export default function MapToolbar({
           <span>{expanded ? "Reducir" : "Ampliar"}</span>
         </button>
       )}
+      {centerBeforeLegend && centerButton}
       {onToggleLayers && (
         <button
           type="button"
@@ -47,17 +61,7 @@ export default function MapToolbar({
           <span>Leyenda</span>
         </button>
       )}
-      {onCenter && (
-        <button
-          type="button"
-          aria-label={centerLabel}
-          title="Centrar seleccion"
-          onClick={onCenter}
-        >
-          <span className="toolbar-icon toolbar-icon-target" aria-hidden="true" />
-          <span>Centrar</span>
-        </button>
-      )}
+      {!centerBeforeLegend && centerButton}
     </div>
   );
 }

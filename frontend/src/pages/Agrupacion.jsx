@@ -1,28 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
-import TerritoryTopFilters from "../components/grouping/TerritoryTopFilters";
+import TerritoryGroupFilters from "../components/grouping/TerritoryGroupFilters";
 import TerritoryCoverageMap from "../components/grouping/TerritoryCoverageMap";
-import TerritorySidePanel from "../components/grouping/TerritorySidePanel";
-import TerritoryResultsTable from "../components/grouping/TerritoryResultsTable";
-import { fetchRouteGeoJson } from "../services/mapApi";
+import TerritoryGroupSidePanel from "../components/grouping/TerritoryGroupSidePanel";
+import TerritoryGroupTable from "../components/grouping/TerritoryGroupTable";
+import MapToolbar from "../components/map/MapToolbar";
 import { DEFAULT_GROUPING_CONFIG, runGrouping } from "../services/groupingApi";
 import { aquaRutaData } from "../data/aquaRutaData";
 import { epsCoverageStatus } from "../utils/epsCoverage";
+import { consolidateDashboardDistrictsAndGroups } from "../utils/dashboardGeo";
 
 const priorityRank = { critica: 4, alta: 3, media: 2, baja: 1 };
 const statusLabels = {
   pendiente: "Pendiente",
   priorizado: "Priorizado",
   revision: "En revisión",
-  rutas: "Listo para ruteo",
 };
-const routeTypeLabels = {
-  grupal: "Cobertura grupal",
-  individual: "Ruta individual",
-};
-
-const MAX_STOPS_PER_STREET_ROUTE = 7;
 
 const initialFilters = {
   viewMode: "grupos",
@@ -30,11 +24,10 @@ const initialFilters = {
   criticidad: "todas",
   epsOriginId: "todos",
   zoneSize: "todos",
-  groupType: "todos",
+  departamento: "todos",
+  provincia: "todos",
+  distrito: "todos",
   nodeStatus: "todos",
-  routeType: "grupal",
-  routeStatus: "todos",
-  optimization: "balanceado",
 };
 
 const initialLayers = {
@@ -43,6 +36,22 @@ const initialLayers = {
   showRoutes: true,
   showNodes: true,
 };
+
+const GROUPING_STORAGE_KEY = "aquaruta:grouping-state:v1";
+
+function readStoredGroupingState() {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(GROUPING_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredGroupingState(state) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(GROUPING_STORAGE_KEY, JSON.stringify(state));
+}
 
 function normalizeText(value) {
   return String(value || "")
@@ -125,8 +134,7 @@ function weightedAverage(items, field) {
   );
 }
 
-function derivedStatus(group, hasRouteScenario) {
-  if (hasRouteScenario) return "rutas";
+function derivedStatus(group) {
   if (group.criticidad === "critica") return "priorizado";
   if (group.criticidad === "alta" || group.criticidad === "media") return "revision";
   return "pendiente";
@@ -140,80 +148,6 @@ function scopeLabel(departments, provinces) {
   return `${departments.length} departamentos`;
 }
 
-function trafficFactor(node) {
-  const base =
-    node.criticidad === "critica"
-      ? 1.35
-      : node.criticidad === "alta"
-      ? 1.22
-      : node.criticidad === "media"
-      ? 1.1
-      : 1;
-  return base + Math.min(0.35, (node.interrupciones || 0) / 8000);
-}
-
-function edgeMetrics(fromCenter, node) {
-  const distance = distanceKm(fromCenter, {
-    lat: node.center?.[0],
-    lon: node.center?.[1],
-  });
-  const traffic = trafficFactor(node);
-  const duration = (distance / 28) * 60 * traffic;
-  const cost = distance * 4.6 + duration * 0.85 + (node.camiones_puntos <= 2 ? 18 : 0);
-  return { distance, duration, cost };
-}
-
-function edgeScore(metrics, optimization) {
-  if (optimization === "distancia") return metrics.distance;
-  if (optimization === "tiempo") return metrics.duration;
-  if (optimization === "costo") return metrics.cost;
-  return metrics.distance * 0.45 + metrics.duration * 0.35 + metrics.cost * 0.2;
-}
-
-function orderNodesForCoverage(origin, nodes, optimization) {
-  const pending = [...nodes];
-  const ordered = [];
-  let currentCenter = [origin.lat, origin.lon];
-  let distanceKmTotal = 0;
-  let durationMinTotal = 0;
-  let costTotal = 0;
-
-  while (pending.length) {
-    const next = pending
-      .map((node) => ({ node, metrics: edgeMetrics(currentCenter, node) }))
-      .sort(
-        (a, b) =>
-          edgeScore(a.metrics, optimization) - edgeScore(b.metrics, optimization)
-      )[0];
-
-    ordered.push(next.node);
-    distanceKmTotal += next.metrics.distance;
-    durationMinTotal += next.metrics.duration;
-    costTotal += next.metrics.cost;
-    currentCenter = next.node.center;
-    pending.splice(
-      pending.findIndex((node) => node.id === next.node.id),
-      1
-    );
-  }
-
-  return { ordered, distanceKmTotal, durationMinTotal, costTotal };
-}
-
-function chunkNodes(nodes, size) {
-  const chunks = [];
-  for (let index = 0; index < nodes.length; index += size) {
-    chunks.push(nodes.slice(index, index + size));
-  }
-  return chunks;
-}
-
-function coordinateSignature(coordinates = []) {
-  return coordinates
-    .map(([lon, lat]) => `${Number(lon).toFixed(5)},${Number(lat).toFixed(5)}`)
-    .join("|");
-}
-
 function matchesSizeBucket(value, bucket) {
   if (bucket === "todos") return true;
   if (bucket === "individual") return value === 1;
@@ -224,110 +158,34 @@ function matchesSizeBucket(value, bucket) {
 }
 
 function groupTypeFor(block) {
-  if ((block.validNodes?.length || 0) === 0 && (block.invalidNodes?.length || 0) > 0) {
-    return "sin-georreferenciacion";
-  }
   if (block.cantidad_zonas === 1 || block.validNodes?.length === 1) return "individual";
-  if ((block.validNodes?.length || 0) >= 2) return "sectorizable";
-  return "sin-georreferenciacion";
+  return "sectorizable";
 }
 
 function groupTypeLabel(type) {
   if (type === "sectorizable") return "Sectorizable";
-  if (type === "individual") return "Grupo individual";
-  return "Sin georreferenciación";
-}
-
-function selectedOriginFor({ activeBlock, activeNode, epsOriginId, epsOrigins }) {
-  if (epsOriginId !== "todos") {
-    return epsOrigins.find((origin) => origin.id === epsOriginId) || null;
-  }
-  return activeNode?.nearestOrigin || activeBlock?.nearestOrigin || null;
-}
-
-function buildRoutePlan({ block, node, routeType, optimization, origin }) {
-  if (!block || !origin) return null;
-
-  const allGroupNodes = (block.districts || []).filter(Boolean);
-  const validGroupNodes = allGroupNodes.filter(hasValidCenter);
-  const invalidGroupNodes = allGroupNodes.filter((item) => !hasValidCenter(item));
-  const selectedNode = node && validGroupNodes.find((item) => item.id === node.id);
-  const sourceNodes =
-    routeType === "individual" && selectedNode ? [selectedNode] : validGroupNodes;
-
-  if (!sourceNodes.length) {
-    return {
-      id: `${block.id}-${routeType}-${optimization}-sin-nodos`,
-      type: routeType,
-      typeLabel: routeTypeLabels[routeType],
-      block,
-      node: selectedNode || null,
-      origin,
-      stops: [],
-      subroutes: [],
-      invalidNodes: invalidGroupNodes,
-      distanceKm: 0,
-      durationMin: 0,
-      cost: 0,
-      optimization,
-    };
-  }
-
-  const orderedResult = orderNodesForCoverage(origin, sourceNodes, optimization);
-  const subroutes = chunkNodes(orderedResult.ordered, MAX_STOPS_PER_STREET_ROUTE).map(
-    (stops, index) => ({
-      id: `${block.id}-${routeType}-${optimization}-${index + 1}`,
-      index,
-      stops,
-      coordinates: [
-        [origin.lon, origin.lat],
-        ...stops.map((item) => [item.center[1], item.center[0]]),
-      ],
-    })
-  );
-
-  return {
-    id: [
-      block.id,
-      routeType,
-      optimization,
-      origin.id,
-      selectedNode?.id || "grupo",
-      coordinateSignature(subroutes.flatMap((item) => item.coordinates)),
-    ].join("|"),
-    type: routeType,
-    typeLabel: routeTypeLabels[routeType],
-    block,
-    node: selectedNode || null,
-    origin,
-    stops: orderedResult.ordered,
-    subroutes,
-    invalidNodes: invalidGroupNodes,
-    distanceKm: orderedResult.distanceKmTotal,
-    durationMin: orderedResult.durationMinTotal,
-    cost: Math.round(orderedResult.costTotal),
-    optimization,
-  };
-}
-
-function summaryFromGeoJson(geoJson) {
-  const summary = geoJson?.features?.[0]?.properties?.summary;
-  if (!summary) return { distanceKm: 0, durationMin: 0 };
-  return {
-    distanceKm: (summary.distance || 0) / 1000,
-    durationMin: (summary.duration || 0) / 60,
-  };
+  return "Individual";
 }
 
 export default function Agrupacion() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const groupingFilterKey = searchParams.toString();
+  const storedGroupingState = useMemo(() => readStoredGroupingState(), []);
   const districts = useMemo(() => aquaRutaData.districts || [], []);
-  const precalculatedGroupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
+  const rawGroupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
+  const canonicalGroupingData = useMemo(
+    () => consolidateDashboardDistrictsAndGroups(districts, rawGroupedZones),
+    [districts, rawGroupedZones]
+  );
+  const canonicalDistricts = canonicalGroupingData.districts;
+  const precalculatedGroupedZones = canonicalGroupingData.groups.filter(
+    (group) => (group.zona_ids || []).length > 0
+  );
   const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
   const operationalRoutes = useMemo(() => aquaRutaData.operationalRoutes || {}, []);
   const initialCriterionFromData = useMemo(
-    () => aquaRutaData.groupedZones?.[0]?.criterio_agrupacion || null,
+    () => aquaRutaData.groupedZones?.[0]?.criterio_agrupación || null,
     []
   );
   const [groupingConfig] = useState(() => ({
@@ -371,16 +229,17 @@ export default function Agrupacion() {
     precalculatedGroupedZones.length ? "idle" : "loading"
   );
   const [groupingError, setGroupingError] = useState("");
-  const [groupingSummary, setGroupingSummary] = useState(null);
   const [groupingRunToken, setGroupingRunToken] = useState(0);
 
-  const requestedGroupId = searchParams.get("grupo") || "";
-  const requestedDistrictId = searchParams.get("distrito") || "";
-  const requestedCriticity = searchParams.get("criticidad") || "todas";
+  const requestedGroupId = searchParams.get("grupo") || storedGroupingState.activeBlockId || "";
+  const requestedDistrictId =
+    searchParams.get("distrito") || storedGroupingState.activeNodeId || "";
+  const requestedCriticity =
+    searchParams.get("criticidad") || storedGroupingState.filters?.criticidad || "todas";
 
   const districtMap = useMemo(
-    () => new Map(districts.map((district) => [district.id, district])),
-    [districts]
+    () => new Map(canonicalDistricts.map((district) => [district.id, district])),
+    [canonicalDistricts]
   );
   const requestedGroup = groupedZones.find((group) => group.id === requestedGroupId);
   const districtGroup = groupedZones.find((group) =>
@@ -389,32 +248,47 @@ export default function Agrupacion() {
 
   const [filters, setFilters] = useState({
     ...initialFilters,
+    ...(storedGroupingState.filters || {}),
     blockId: requestedGroup?.id || districtGroup?.id || "todos",
     criticidad: ["critica", "alta", "media", "baja"].includes(requestedCriticity)
       ? requestedCriticity
-      : "todas",
+      : storedGroupingState.filters?.criticidad || "todas",
     viewMode: requestedDistrictId || requestedGroup ? "nodos" : "grupos",
   });
-  const [isDetailOpen, setIsDetailOpen] = useState(Boolean(requestedGroup || districtGroup));
+  const [isDetailOpen, setIsDetailOpen] = useState(
+    Boolean(requestedGroup || districtGroup || storedGroupingState.isDetailOpen)
+  );
   const [layers] = useState(initialLayers);
   const [statusOverrides] = useState({});
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("criticidad");
+  const [search, setSearch] = useState(storedGroupingState.search || "");
+  const [sortBy, setSortBy] = useState(storedGroupingState.sortBy || "criticidad");
+  const [pageSize, setPageSize] = useState(Number(storedGroupingState.pageSize) || 20);
+  const [page, setPage] = useState(Number(storedGroupingState.page) || 1);
   const [activeBlockId, setActiveBlockId] = useState(
     requestedGroup?.id || districtGroup?.id || groupedZones[0]?.id || ""
   );
   const [activeNodeId, setActiveNodeId] = useState(requestedDistrictId);
-  const [routeSegments, setRouteSegments] = useState([]);
-  const [routeLoading, setRouteLoading] = useState(false);
-  const [routeError, setRouteError] = useState("");
-  const [failedSubrouteIds, setFailedSubrouteIds] = useState([]);
-  const [detailPanelOpen, setDetailPanelOpen] = useState(true);
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [showMapLegend, setShowMapLegend] = useState(true);
+  const [mapFocusVersion, setMapFocusVersion] = useState(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
     return () => window.clearTimeout(timer);
-  }, [detailPanelOpen, mapExpanded]);
+  }, [mapExpanded]);
+
+  useEffect(() => {
+    writeStoredGroupingState({
+      filters,
+      search,
+      sortBy,
+      page,
+      pageSize,
+      activeBlockId,
+      activeNodeId,
+      isDetailOpen,
+    });
+  }, [activeBlockId, activeNodeId, filters, isDetailOpen, page, pageSize, search, sortBy]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -425,9 +299,10 @@ export default function Agrupacion() {
 
     runGrouping(groupingRequest, { signal: controller.signal })
       .then((payload) => {
-        const groups = payload.groups || [];
+        const groups = consolidateDashboardDistrictsAndGroups(districts, payload.groups || []).groups.filter(
+          (group) => (group.zona_ids || []).length > 0
+        );
         setGroupedZones(groups);
-        setGroupingSummary(payload.summary || null);
         setGroupingStatus(groups.length ? "success" : "empty");
 
         const groupIds = new Set(groups.map((group) => group.id));
@@ -457,16 +332,15 @@ export default function Agrupacion() {
       .catch((error) => {
         if (error?.name === "AbortError") return;
         setGroupedZones([]);
-        setGroupingSummary(null);
         setGroupingStatus("error");
-        setGroupingError(error?.message || "No se pudo calcular la agrupacion operativa.");
+        setGroupingError(error?.message || "No se pudo calcular la agrupación operativa.");
       });
 
     return () => {
       window.clearTimeout(loadingTimer);
       controller.abort();
     };
-  }, [activeBlockId, activeNodeId, groupingRequest, groupingRunToken]);
+  }, [activeBlockId, activeNodeId, districts, groupingRequest, groupingRunToken]);
 
   const blocks = useMemo(() => {
     return groupedZones
@@ -501,6 +375,10 @@ export default function Agrupacion() {
         );
         const estimatedPopulation = groupDistrictsWithUfds.reduce(
           (acc, district) => acc + (district.personas_afectadas_estimadas || 0),
+          0
+        );
+        const affectedHouseholds = groupDistrictsWithUfds.reduce(
+          (acc, district) => acc + (Number(district.total_hogares) || 0),
           0
         );
         const demandWeight = Math.max(
@@ -554,6 +432,7 @@ export default function Agrupacion() {
           scopeLabel: scopeLabel(departments, provinces),
           connections,
           estimatedPopulation,
+          affectedHouseholds,
           demandWeight,
           priorityScore,
           avgHouseholdSize,
@@ -632,29 +511,44 @@ export default function Agrupacion() {
     detailNodes[0] ||
     null;
 
-  const routeNode = useMemo(() => {
-    if (filters.routeType !== "individual") return null;
-    if (activeNode?.blockId === activeBlock?.id) return activeNode;
-    return enrichedNodes.find((node) => node.blockId === activeBlock?.id) || null;
-  }, [activeBlock, activeNode, enrichedNodes, filters.routeType]);
+  const options = useMemo(() => {
+    const departments = new Set();
+    const provinces = new Set();
+    const districtOptions = [];
 
-  const selectedRouteOrigin = useMemo(
-    () =>
-      selectedOriginFor({
-        activeBlock,
-        activeNode: routeNode,
-        epsOriginId: filters.epsOriginId,
-        epsOrigins,
-      }),
-    [activeBlock, epsOrigins, filters.epsOriginId, routeNode]
-  );
+    for (const block of blocks) {
+      for (const district of block.districts || []) {
+        if (district.departamento) departments.add(district.departamento);
+        if (
+          filters.departamento === "todos" ||
+          district.departamento === filters.departamento
+        ) {
+          if (district.provincia) provinces.add(district.provincia);
+        }
+        const departmentMatches =
+          filters.departamento === "todos" || district.departamento === filters.departamento;
+        const provinceMatches =
+          filters.provincia === "todos" || district.provincia === filters.provincia;
+        if (departmentMatches && provinceMatches) {
+          districtOptions.push({
+            value: district.id,
+            label: `${district.nombre} - ${district.provincia}, ${district.departamento}`,
+          });
+        }
+      }
+    }
 
-  const options = useMemo(
-    () => ({
+    return {
       epsOrigins,
-    }),
-    [epsOrigins]
-  );
+      departments: [...departments].sort((a, b) => a.localeCompare(b, "es")),
+      provinces: [...provinces].sort((a, b) => a.localeCompare(b, "es")),
+      districts: districtOptions
+        .filter((district, index, items) =>
+          items.findIndex((item) => item.value === district.value) === index
+        )
+        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+    };
+  }, [blocks, epsOrigins, filters.departamento, filters.provincia]);
 
   const filteredBlocks = useMemo(() => {
     const selectedBlockExists =
@@ -669,11 +563,21 @@ export default function Agrupacion() {
         return false;
       }
       if (!matchesSizeBucket(block.cantidad_zonas || 0, filters.zoneSize)) return false;
-      if (filters.groupType === "con-eps" && !block.nearestOrigin) return false;
-      if (filters.groupType === "sin-eps" && block.nearestOrigin) return false;
       if (
-        !["todos", "con-eps", "sin-eps"].includes(filters.groupType) &&
-        block.groupType !== filters.groupType
+        filters.departamento !== "todos" &&
+        !block.districts.some((district) => district.departamento === filters.departamento)
+      ) {
+        return false;
+      }
+      if (
+        filters.provincia !== "todos" &&
+        !block.districts.some((district) => district.provincia === filters.provincia)
+      ) {
+        return false;
+      }
+      if (
+        filters.distrito !== "todos" &&
+        !block.districts.some((district) => district.id === filters.distrito)
       ) {
         return false;
       }
@@ -690,188 +594,43 @@ export default function Agrupacion() {
             block.nombre,
             block.scopeLabel,
             block.nearestOrigin?.prestador,
-            ...block.zonas,
+            ...block.districts.flatMap((district) => [
+              district.nombre,
+              district.provincia,
+              district.departamento,
+              district.eps_principal,
+            ]),
           ].join(" ")).includes(query)
         );
 
     return [...result].sort((a, b) => {
       if (sortBy === "interrupciones") return b.interrupciones - a.interrupciones;
       if (sortBy === "poblacion") return b.estimatedPopulation - a.estimatedPopulation;
-      if (sortBy === "demanda") return b.demandWeight - a.demandWeight;
       if (sortBy === "zonas") return b.cantidad_zonas - a.cantidad_zonas;
-      if (sortBy === "nodos") return b.validNodes.length - a.validNodes.length;
+      if (sortBy === "hogares") return b.affectedHouseholds - a.affectedHouseholds;
       if (sortBy === "distancia") return a.nearestOriginDistanceKm - b.nearestOriginDistanceKm;
       if (sortBy === "prioridad") return (a.prioridad || 999) - (b.prioridad || 999);
       return (priorityRank[b.criticidad] || 0) - (priorityRank[a.criticidad] || 0);
     });
   }, [filteredBlocks, search, sortBy]);
 
-  const routePlan = useMemo(
-    () =>
-      buildRoutePlan({
-        block: activeBlock,
-        node: routeNode,
-        routeType: filters.routeType,
-        optimization: filters.optimization,
-        origin: selectedRouteOrigin,
-      }),
-    [activeBlock, filters.optimization, filters.routeType, routeNode, selectedRouteOrigin]
-  );
-
-  const routeRequestKey = useMemo(() => {
-    if (filters.viewMode !== "rutas" || !routePlan?.subroutes?.length) return "";
-    return `${routePlan.id}|${routePlan.subroutes
-      .map((route) => coordinateSignature(route.coordinates))
-      .join("::")}`;
-  }, [filters.viewMode, routePlan]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadCoverageRoutes() {
-      if (!routeRequestKey || !routePlan?.subroutes?.length) {
-        setRouteSegments([]);
-        setRouteError("");
-        setRouteLoading(false);
-        setFailedSubrouteIds([]);
-        return;
-      }
-
-      setRouteLoading(true);
-      setRouteError("");
-      setRouteSegments([]);
-      setFailedSubrouteIds([]);
-
-      const results = await Promise.allSettled(
-        routePlan.subroutes.map((subroute) => fetchRouteGeoJson(subroute.coordinates))
-      );
-
-      if (cancelled) return;
-
-      const okSegments = [];
-      const failed = [];
-
-      results.forEach((result, index) => {
-        const subroute = routePlan.subroutes[index];
-        if (result.status === "fulfilled") {
-          okSegments.push({
-            id: subroute.id,
-            index,
-            stops: subroute.stops,
-            geoJson: result.value,
-            summary: summaryFromGeoJson(result.value),
-          });
-        } else {
-          console.error(result.reason);
-          failed.push(subroute.id);
-        }
-      });
-
-      setRouteSegments(okSegments);
-      setFailedSubrouteIds(failed);
-      setRouteError(
-        failed.length
-          ? "Una o más subrutas no pudieron resolverse sobre la red vial real."
-          : ""
-      );
-      setRouteLoading(false);
-    }
-
-    loadCoverageRoutes();
-    return () => {
-      cancelled = true;
-    };
-  }, [routePlan, routeRequestKey]);
-
-  const routeResult = useMemo(() => {
-    if (!routePlan) return null;
-
-    const failedRouteIds = new Set(failedSubrouteIds);
-    const failedNodeIds = new Set(
-      routePlan.subroutes
-        .filter((subroute) => failedRouteIds.has(subroute.id))
-        .flatMap((subroute) => subroute.stops.map((node) => node.id))
-    );
-    const coveredNodes = routePlan.stops.filter((node) => !failedNodeIds.has(node.id));
-    const noConnectionNodes = [
-      ...routePlan.invalidNodes,
-      ...routePlan.stops.filter((node) => failedNodeIds.has(node.id)),
-    ];
-    const pendingNodes = routeLoading ? routePlan.stops : [];
-    const realDistanceKm = routeSegments.reduce(
-      (acc, segment) => acc + (segment.summary?.distanceKm || 0),
-      0
-    );
-    const realDurationMin = routeSegments.reduce(
-      (acc, segment) => acc + (segment.summary?.durationMin || 0),
-      0
-    );
-    const distanceKm = realDistanceKm || routePlan.distanceKm;
-    const durationMin = realDurationMin || routePlan.durationMin;
-    const cost = Math.round(distanceKm * 4.6 + durationMin * 0.85 + routePlan.stops.length * 8);
-
-    const status = routeLoading
-      ? "pendiente"
-      : !routePlan.stops.length || coveredNodes.length === 0
-      ? "sin-conexion"
-      : noConnectionNodes.length > 0 || coveredNodes.length < routePlan.stops.length
-      ? "parcial"
-      : "cubierta";
-
-    return {
-      status,
-      coveredNodes,
-      pendingNodes,
-      noConnectionNodes,
-      failedSubrouteIds,
-      distanceKm,
-      durationMin,
-      cost,
-      coverageType:
-        routePlan.type === "individual"
-          ? "ruta individual"
-          : routePlan.subroutes.length > 1
-          ? "subrutas múltiples"
-          : "ruta única",
-    };
-  }, [failedSubrouteIds, routeLoading, routePlan, routeSegments]);
-
-  const routeLayerKey = useMemo(() => {
-    if (!routeRequestKey) return "";
-    return [
-      routeRequestKey,
-      routeSegments.map((segment) => segment.id).join(","),
-      failedSubrouteIds.join(","),
-      routeLoading ? "loading" : "ready",
-    ].join("|");
-  }, [failedSubrouteIds, routeLoading, routeRequestKey, routeSegments]);
-
-  const routeVisible =
-    filters.routeStatus === "todos" || routeResult?.status === filters.routeStatus;
-  const visibleRoutePlan = routeVisible ? routePlan : null;
-  const visibleRouteSegments = routeVisible ? routeSegments : [];
 
   function handleFilterChange(key, value) {
+    setPage(1);
     setFilters((current) => {
       const next = { ...current, [key]: value };
 
       if (key === "viewMode") {
         if (value === "grupos") {
-          next.routeType = "grupal";
-          next.nodeStatus = "todos";
-          next.routeStatus = "todos";
-        }
-        if (value === "nodos") {
-          next.routeStatus = "todos";
-        }
-        if (value === "rutas") {
-          next.zoneSize = "todos";
           next.nodeStatus = "todos";
         }
       }
-
-      if (key === "routeType" && value === "individual") {
-        next.viewMode = "rutas";
+      if (key === "departamento") {
+        next.provincia = "todos";
+        next.distrito = "todos";
+      }
+      if (key === "provincia") {
+        next.distrito = "todos";
       }
 
       return next;
@@ -889,24 +648,13 @@ export default function Agrupacion() {
     setFilters(initialFilters);
     setSearch("");
     setSortBy("criticidad");
+    setPageSize(20);
+    setPage(1);
+    navigate("/agrupacion", { replace: true });
   }
 
   function retryGrouping() {
     setGroupingRunToken((current) => current + 1);
-  }
-
-  function switchMode(mode, block = activeBlock) {
-    setFilters((current) => ({
-      ...current,
-      viewMode: mode,
-      blockId: block?.id || current.blockId,
-      routeType: mode === "rutas" ? current.routeType : "grupal",
-    }));
-    if (block?.id) {
-      setActiveBlockId(block.id);
-      const firstNode = block.validNodes?.[0];
-      if (firstNode) setActiveNodeId(firstNode.id);
-    }
   }
 
   function selectBlock(blockId) {
@@ -925,10 +673,9 @@ export default function Agrupacion() {
       ...current,
       blockId: block.id,
       viewMode: "nodos",
-      routeType: "grupal",
-      routeStatus: "todos",
     }));
     setIsDetailOpen(true);
+    navigate(`/agrupacion?grupo=${encodeURIComponent(block.id)}`, { replace: true });
   }
 
   function closeGroupDetail() {
@@ -937,9 +684,8 @@ export default function Agrupacion() {
       ...current,
       blockId: "todos",
       viewMode: "grupos",
-      routeType: "grupal",
-      routeStatus: "todos",
     }));
+    navigate("/agrupacion", { replace: true });
   }
 
   function selectNode(nodeId) {
@@ -947,21 +693,41 @@ export default function Agrupacion() {
     if (!node) return;
     setActiveNodeId(node.id);
     setActiveBlockId(node.blockId);
-    if (filters.viewMode === "rutas") {
-      setFilters((current) => ({ ...current, routeType: "individual" }));
-    }
+    navigate(`/agrupacion?grupo=${encodeURIComponent(node.blockId)}&distrito=${encodeURIComponent(node.id)}`, {
+      replace: true,
+    });
+  }
+
+  function openSectorization() {
+    if (!activeBlock?.id || activeBlock.groupType !== "sectorizable") return;
+    navigate(`/sectorizacion?groupId=${encodeURIComponent(activeBlock.id)}`);
   }
 
   return (
     <MainLayout>
-      <section className={`territory-page workspace-page ${mapExpanded ? "workspace-expanded" : ""} ${detailPanelOpen ? "" : "panel-collapsed"}`}>
+      <section className={`territory-page workspace-page ${mapExpanded ? "workspace-expanded" : ""}`}>
         {!isDetailOpen ? (
           <>
-            <TerritoryTopFilters
-              filters={filters}
-              options={options}
-              onFilterChange={handleFilterChange}
-              onReset={resetFilters}
+              <TerritoryGroupFilters
+                filters={filters}
+                options={options}
+                search={search}
+                sortBy={sortBy}
+                pageSize={pageSize}
+                onFilterChange={handleFilterChange}
+                onSearchChange={(value) => {
+                  setSearch(value);
+                  setPage(1);
+                }}
+                onSortChange={(value) => {
+                  setSortBy(value);
+                  setPage(1);
+                }}
+                onPageSizeChange={(value) => {
+                  setPageSize(value);
+                  setPage(1);
+                }}
+                onReset={resetFilters}
             />
 
             {groupingStatus === "loading" && (
@@ -972,7 +738,7 @@ export default function Agrupacion() {
 
             {groupingStatus === "error" && (
               <div className="empty-state">
-                <p>{groupingError || "No se pudo calcular la agrupacion operativa."}</p>
+                <p>{groupingError || "No se pudo calcular la agrupación operativa."}</p>
                 <button type="button" onClick={retryGrouping}>Reintentar</button>
               </div>
             )}
@@ -983,20 +749,15 @@ export default function Agrupacion() {
               </div>
             )}
 
-            {groupingStatus === "success" && groupingSummary && (
-              <div className="empty-state">
-                {groupingSummary.groupCount} grupos recalculados desde {groupingSummary.districtCount} distritos.
-              </div>
-            )}
-
             {groupingStatus !== "error" && groupingStatus !== "empty" && (
-              <TerritoryResultsTable
+              <TerritoryGroupTable
+                key={`${search}|${sortBy}|${pageSize}|${filters.criticidad}|${filters.epsOriginId}|${filters.zoneSize}|${filters.departamento}|${filters.provincia}|${filters.distrito}`}
                 blocks={searchedBlocks}
+                totalGroups={canonicalGroupingData.groups.length}
                 activeBlockId={activeBlock?.id}
-                search={search}
-                sortBy={sortBy}
-                onSearchChange={setSearch}
-                onSortChange={setSortBy}
+                pageSize={pageSize}
+                page={page}
+                onPageChange={setPage}
                 onOpenGroup={openGroupDetail}
               />
             )}
@@ -1004,89 +765,58 @@ export default function Agrupacion() {
         ) : (
           <>
             <article className="territory-detail-header">
-              <button type="button" onClick={closeGroupDetail}>
-                Volver al listado
-              </button>
               <div>
                 <span>Detalle del grupo operativo</span>
                 <h2>{activeBlock?.nombre || "Grupo no disponible"}</h2>
-                <p>{activeBlock?.scopeLabel || "Selecciona un grupo para revisar detalle."}</p>
+                <p>
+                  {activeBlock
+                    ? `${activeBlock.cantidad_zonas} distritos · ${activeBlock.departments.length} departamentos`
+                    : "Selecciona un grupo para revisar detalle."}
+                </p>
               </div>
-              <div className="territory-detail-tabs">
-                <button
-                  type="button"
-                  className={filters.viewMode === "nodos" ? "active" : ""}
-                  onClick={() => switchMode("nodos", activeBlock)}
-                >
-                  Nodos
-                </button>
-                <button
-                  type="button"
-                  className={filters.viewMode === "rutas" ? "active" : ""}
-                  onClick={() => switchMode("rutas", activeBlock)}
-                >
-                  Cobertura
-                </button>
-              </div>
+              <button type="button" onClick={closeGroupDetail}>
+                Volver a grupos
+              </button>
             </article>
-
-            <div className="workspace-toolbar" aria-label="Herramientas de agrupacion">
-              <button
-                type="button"
-                aria-expanded={detailPanelOpen}
-                aria-controls="territory-side-panel"
-                onClick={() => setDetailPanelOpen((current) => !current)}
-              >
-                {detailPanelOpen ? "Ocultar detalle" : "Mostrar detalle"}
-              </button>
-              <button
-                type="button"
-                aria-pressed={mapExpanded}
-                onClick={() => setMapExpanded((current) => !current)}
-              >
-                {mapExpanded ? "Salir de mapa ampliado" : "Ampliar mapa"}
-              </button>
-            </div>
 
             <div className="territory-main-grid workspace-map-layout">
               <TerritoryCoverageMap
-                viewMode={filters.viewMode}
+                viewMode="nodos"
                 blocks={activeBlock ? [activeBlock] : []}
                 nodes={detailNodes}
                 epsOrigins={epsOrigins}
                 activeBlock={activeBlock}
                 activeNode={activeNode}
-                routePlan={visibleRoutePlan}
-                routeResult={routeVisible ? routeResult : null}
-                routeSegments={visibleRouteSegments}
-                routeKey={routeLayerKey}
-                routeStatus={
-                  routeLoading
-                    ? "Calculando sobre red vial"
-                    : !routeVisible
-                    ? "Filtro de cobertura sin coincidencias"
-                    : routeResult?.status === "cubierta"
-                    ? "Cobertura vial completa"
-                    : routeResult?.status === "parcial"
-                    ? "Cobertura parcial"
-                    : routeError || "Sin cobertura vial"
-                }
+                routePlan={null}
+                routeResult={null}
+                routeSegments={[]}
+                routeKey=""
+                routeStatus=""
                 layers={layers}
+                showLegend={showMapLegend}
+                focusVersion={mapFocusVersion}
+                mapControls={
+                  <MapToolbar
+                    expanded={mapExpanded}
+                    legendVisible={showMapLegend}
+                    onToggleExpanded={() => setMapExpanded((current) => !current)}
+                    onToggleLegend={() => setShowMapLegend((current) => !current)}
+                    onCenter={() => setMapFocusVersion((current) => current + 1)}
+                    centerLabel="Centrar distritos del grupo"
+                    centerBeforeLegend
+                  />
+                }
                 onSelectBlock={selectBlock}
                 onSelectNode={selectNode}
               />
 
               <div id="territory-side-panel" className="workspace-side-panel">
-              <TerritorySidePanel
-                viewMode={filters.viewMode}
-                block={activeBlock}
-                node={activeNode}
-                routePlan={visibleRoutePlan}
-                routeResult={routeVisible ? routeResult : null}
-                routeLoading={routeLoading}
-                routeError={routeError}
-                onSelectNode={selectNode}
-              />
+                <TerritoryGroupSidePanel
+                  block={activeBlock}
+                  node={activeNode}
+                  onSelectNode={selectNode}
+                  onOpenSectorization={openSectorization}
+                />
               </div>
             </div>
           </>

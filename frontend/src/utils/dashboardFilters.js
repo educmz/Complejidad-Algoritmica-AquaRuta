@@ -14,6 +14,17 @@ function sortText(values) {
   return [...values].sort((a, b) => String(a).localeCompare(String(b), "es"));
 }
 
+function groupNumber(group = {}) {
+  const match = String(group.id || group.nombre || "").match(/grupo-(\d+)|grupo\s+(\d+)/i);
+  return match ? Number(match[1] || match[2]) : Number.POSITIVE_INFINITY;
+}
+
+function sortGroupsNaturally(groups = []) {
+  return [...groups].sort(
+    (a, b) => groupNumber(a) - groupNumber(b) || String(a.nombre).localeCompare(String(b.nombre), "es")
+  );
+}
+
 function groupDistrictIds(groups = [], groupId) {
   if (!isActive(groupId)) return null;
   const group = groups.find((item) => item.id === groupId);
@@ -107,9 +118,9 @@ export function buildDashboardOptions(districts = [], groups = [], filters = {})
     distritos: districtDistricts
       .filter((district) => district.id && district.nombre)
       .sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
-    grupos: groups
-      .filter((group) => (group.zona_ids || []).some((id) => groupCandidateIds.has(id)))
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
+    grupos: sortGroupsNaturally(
+      groups.filter((group) => (group.zona_ids || []).some((id) => groupCandidateIds.has(id)))
+    ),
   };
 }
 
