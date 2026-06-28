@@ -10,7 +10,7 @@ from typing import Any
 import pandas as pd
 
 from loaders.demographics_loader import PROMEDIO_NACIONAL_HOGAR
-from utils.text_utils import normalize_text, slug_text
+from utils.text_utils import normalize_text, normalize_ubigeo, slug_text
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +284,117 @@ def build_districts_summary(df: pd.DataFrame, demographics=None) -> tuple[list[d
     return records, match_report, validation_report
 
 
+def _canonical_district_key(district: dict) -> str:
+    ubigeo = normalize_ubigeo(district.get("ubigeo"))
+    if ubigeo and len(ubigeo) == 6:
+        return f"ubigeo:{ubigeo}"
+    return "territory:" + "|".join(
+        [
+            normalize_text(district.get("departamento")),
+            normalize_text(district.get("provincia")),
+            normalize_text(district.get("nombre") or district.get("distrito")),
+        ]
+    )
+
+
+def _weighted_average_records(records: list[dict], field: str, total_interruptions: float) -> float:
+    if total_interruptions <= 0:
+        return 0.0
+    return sum(
+        float(item.get(field, 0) or 0) * float(item.get("interrupciones", 0) or 0)
+        for item in records
+    ) / total_interruptions
+
+
+def _recompute_priority_fields(records: list[dict]) -> None:
+    max_people = max((item.get("personas_afectadas_estimadas", 0) for item in records), default=0)
+    max_interruptions = max((item.get("interrupciones", 0) for item in records), default=0)
+    max_connections = max((item.get("conexiones_afectadas_evento_max", 0) for item in records), default=0)
+    max_duration = max((item.get("duracion_maxima_horas", 0) for item in records), default=0)
+
+    for record in records:
+        record["peso_demanda_familiar"] = round(
+            normalizar_maximo(record.get("personas_afectadas_estimadas", 0), max_people), 4
+        )
+        record["peso_interrupciones"] = round(
+            normalizar_maximo(record.get("interrupciones", 0), max_interruptions), 4
+        )
+        record["peso_conexiones_afectadas"] = round(
+            normalizar_maximo(record.get("conexiones_afectadas_evento_max", 0), max_connections), 4
+        )
+        record["peso_duracion"] = round(
+            normalizar_maximo(record.get("duracion_maxima_horas", 0), max_duration), 4
+        )
+        priority_score = (
+            0.45 * record["peso_interrupciones"]
+            + 0.25 * record["peso_conexiones_afectadas"]
+            + 0.20 * record["peso_demanda_familiar"]
+            + 0.10 * record["peso_duracion"]
+        )
+        record["prioridad_score"] = round(clamp(priority_score), 4)
+        record["prioridad"] = classify_priority(record["prioridad_score"])
+        record["criticidad"] = classify_criticality(int(record.get("interrupciones", 0) or 0))
+
+
+def consolidate_district_records(records: list[dict]) -> tuple[list[dict], dict]:
+    buckets: dict[str, list[dict]] = {}
+    for record in records:
+        buckets.setdefault(_canonical_district_key(record), []).append(record)
+
+    consolidated = []
+    duplicate_buckets = 0
+    duplicate_records_removed = 0
+
+    for canonical_key, bucket in buckets.items():
+        if len(bucket) > 1:
+            duplicate_buckets += 1
+            duplicate_records_removed += len(bucket) - 1
+
+        primary = sorted(
+            bucket,
+            key=lambda item: (
+                0 if item.get("center") else 1,
+                -int(item.get("interrupciones", 0) or 0),
+                str(item.get("id", "")),
+            ),
+        )[0]
+        total_interruptions = sum(int(item.get("interrupciones", 0) or 0) for item in bucket)
+        merged = dict(primary)
+        merged["canonical_key"] = canonical_key
+        merged["duplicate_source_ids"] = [item.get("id") for item in bucket]
+        merged["interrupciones"] = total_interruptions
+        merged["conexiones_afectadas"] = sum(
+            int(item.get("conexiones_afectadas", 0) or 0) for item in bucket
+        )
+        merged["unidades_afectadas"] = sum(int(item.get("unidades_afectadas", 0) or 0) for item in bucket)
+        merged["camiones_puntos"] = sum(int(item.get("camiones_puntos", 0) or 0) for item in bucket)
+        merged["personas_afectadas_estimadas"] = sum(
+            int(item.get("personas_afectadas_estimadas", 0) or 0) for item in bucket
+        )
+        merged["conexiones_afectadas_evento_max"] = max(
+            int(item.get("conexiones_afectadas_evento_max", 0) or 0) for item in bucket
+        )
+        merged["duracion_promedio_horas"] = rounded_float(
+            _weighted_average_records(bucket, "duracion_promedio_horas", total_interruptions), 2
+        )
+        merged["duracion_maxima_horas"] = max(
+            float(item.get("duracion_maxima_horas", 0) or 0) for item in bucket
+        )
+        consolidated.append(merged)
+
+    _recompute_priority_fields(consolidated)
+    report = {
+        "nodos_antes": len(records),
+        "nodos_despues": len(consolidated),
+        "duplicados_detectados": duplicate_buckets,
+        "registros_consolidados": duplicate_records_removed,
+        "identificador_canonico": "ubigeo_normalizado",
+        "fallback_canonico": "departamento_provincia_distrito_normalizados",
+    }
+    logger.info("Consolidacion distrital: %s", report)
+    return consolidated, report
+
+
 def enrich_districts_with_centers(districts_summary: list[dict], centers_df: pd.DataFrame) -> list[dict]:
     centers_lookup = {}
     for _, row in centers_df.iterrows():
@@ -316,6 +427,8 @@ def strip_internal_fields(districts_summary: list[dict]) -> list[dict]:
         clean.pop("departamento_norm", None)
         clean.pop("provincia_norm", None)
         clean.pop("distrito_norm", None)
+        clean.pop("canonical_key", None)
+        clean.pop("duplicate_source_ids", None)
         clean_records.append(clean)
     return clean_records
 

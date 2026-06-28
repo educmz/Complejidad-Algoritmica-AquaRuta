@@ -13,6 +13,7 @@ import {
   buildDashboardGeoAudit,
   buildRelatedEpsContext,
   buildSelectedEpsContext,
+  consolidateDashboardDistrictsAndGroups,
   isValidCoordinatePair,
   normalizeEpsName,
   normalizeUbigeo,
@@ -75,6 +76,28 @@ const districts = [
     center: [-14.826944, -74.9375],
     interrupciones: 11,
   },
+  {
+    id: "lima-barranca-ate",
+    nombre: "Ate",
+    eps_principal: "SEDAPAL",
+    departamento: "Lima",
+    provincia: "Barranca",
+    ubigeo: "150103",
+    center: null,
+    interrupciones: 1,
+    conexiones_afectadas: 158,
+  },
+  {
+    id: "lima-lima-ate",
+    nombre: "Ate",
+    eps_principal: "SEDAPAL",
+    departamento: "Lima",
+    provincia: "Lima",
+    ubigeo: "150103",
+    center: [-12.026389, -76.921389],
+    interrupciones: 1264,
+    conexiones_afectadas: 5078747,
+  },
 ];
 
 const groups = [
@@ -83,6 +106,16 @@ const groups = [
     id: "grupo-lima",
     nombre: "Grupo Lima",
     zona_ids: ["lima-lima-sjl", "lima-lima-miraflores"],
+  },
+  {
+    id: "grupo-ate-a",
+    nombre: "Grupo Ate A",
+    zona_ids: ["lima-barranca-ate"],
+  },
+  {
+    id: "grupo-ate-b",
+    nombre: "Grupo Ate B",
+    zona_ids: ["lima-lima-ate"],
   },
 ];
 
@@ -140,7 +173,7 @@ assert.deepEqual(
     departamento: "Lima",
     provincia: "Lima",
   }).map((district) => district.id),
-  ["lima-lima-sjl", "lima-lima-miraflores"]
+  ["lima-lima-sjl", "lima-lima-miraflores", "lima-lima-ate"]
 );
 
 assert.deepEqual(getDashboardMapDistricts(districts, "lima-lima-sjl"), [districts[2]]);
@@ -175,6 +208,17 @@ assert.equal(nazcaRelatedEps[0].prestador, "EMAPAVIGS");
 assert.equal(nazcaRelatedEps[0].relatedDistricts.length, 1);
 assert.equal(nazcaRelatedEps[0].locationType, "no_disponible");
 
+const canonicalDashboard = consolidateDashboardDistrictsAndGroups(districts, groups);
+const canonicalAte = canonicalDashboard.districts.filter((district) => district.ubigeo === "150103");
+const groupMemberships = canonicalDashboard.groups.filter((group) =>
+  (group.zona_ids || []).includes(canonicalAte[0]?.id)
+);
+assert.equal(canonicalAte.length, 1);
+assert.equal(canonicalAte[0].interrupciones, 1265);
+assert.equal(canonicalAte[0].center[0], -12.026389);
+assert.equal(groupMemberships.length, 1);
+assert.equal(canonicalDashboard.stats.before - canonicalDashboard.stats.after >= 1, true);
+
 const geoAudit = buildDashboardGeoAudit(districts);
 assert.equal(geoAudit.total, districts.length);
 assert.equal(geoAudit.validUbigeo >= 2, true);
@@ -200,6 +244,7 @@ assert.equal(
 
 const dashboard = await readFile("src/pages/DashboardOperativo.jsx", "utf8");
 const dashboardMap = await readFile("src/components/dashboard/DashboardMiniMap.jsx", "utf8");
+const dashboardGeo = await readFile("src/utils/dashboardGeo.js", "utf8");
 const css = await readFile("src/styles/globals.css", "utf8");
 const routeElements = await readFile("src/routeElements.jsx", "utf8");
 assert.equal(routeElements.includes("./pages/DashboardOperativo"), true);
@@ -214,8 +259,11 @@ assert.equal(dashboard.includes("InfoTooltip"), false, "KPI no deben tener toolt
 assert.equal(dashboard.includes("dashboard-info-button"), false, "KPI no deben tener icono info");
 assert.ok(dashboard.includes("Ver grupo operativo"));
 assert.ok(dashboard.includes("Sectorizar grupo"));
-assert.ok(dashboard.includes("Sin alertas operativas"));
-assert.ok(dashboard.includes("EPS seleccionada"));
+assert.equal(dashboard.includes("Alertas operativas"), false);
+assert.equal(dashboard.includes("Sin alertas operativas"), false);
+assert.equal(dashboard.includes("Datos geograficos incompletos"), false);
+assert.equal(dashboard.includes("distritos no pudieron representarse"), false);
+assert.ok(dashboardGeo.includes("EPS seleccionada"));
 assert.equal(dashboard.includes("No hay EPS relacionadas con los filtros seleccionados."), true);
 
 assert.equal(dashboardMap.includes(".slice(0, 80)"), false, "Mapa no debe truncar distritos");
@@ -229,4 +277,6 @@ assert.ok(css.includes(".dashboard-group-grid"));
 assert.ok(css.includes("grid-template-columns: repeat(2, minmax(0, 1fr));"));
 assert.ok(css.includes("@media (max-width: 1180px)"));
 assert.ok(css.includes(".dashboard-eps-marker"));
+assert.ok(css.includes(".dashboard-map-toolbar"));
+assert.equal(css.includes(".dashboard-alert-card"), false);
 assert.equal(css.includes(".dashboard-tooltip-content"), false);
