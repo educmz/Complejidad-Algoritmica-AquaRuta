@@ -195,12 +195,19 @@ export default function ExploracionLocal() {
   const [backtrackingError, setBacktrackingError] = useState("");
   const [backtrackingPayload, setBacktrackingPayload] = useState(null);
   const [backtrackingRetryToken, setBacktrackingRetryToken] = useState(0);
+  const [controlPanelOpen, setControlPanelOpen] = useState(true);
+  const [mapExpanded, setMapExpanded] = useState(false);
   const [backtrackingConstraints, setBacktrackingConstraints] = useState({
     maxVisits: 4,
     maxDistanceKm: 250,
     maxDurationMin: 480,
     maxOperationalCost: 1500,
   });
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
+    return () => window.clearTimeout(timer);
+  }, [controlPanelOpen, mapExpanded]);
 
   const selectedGroup =
     groupOptions.find((group) => group.groupId === selectedGroupId) || groupOptions[0] || null;
@@ -759,7 +766,7 @@ export default function ExploracionLocal() {
 
   return (
     <MainLayout>
-      <section className="page-section local-explorer-page">
+      <section className={`page-section local-explorer-page workspace-page ${mapExpanded ? "workspace-expanded" : ""} ${controlPanelOpen ? "" : "panel-collapsed"}`}>
         <article className="page-card local-explorer-hero">
           <div>
             <h2 className="page-title">Exploración local</h2>
@@ -783,7 +790,45 @@ export default function ExploracionLocal() {
           </div>
         </article>
 
-        <article className="panel local-control-panel">
+        <div className="workspace-toolbar" aria-label="Herramientas de exploracion local">
+          <div className="algorithm-tabs" role="tablist" aria-label="Algoritmo visible">
+            {[
+              ["network", "TSP"],
+              ["dijkstra", "Dijkstra"],
+              ["traversal", traversalAlgorithm.toUpperCase()],
+              ["backtracking", "Backtracking"],
+              ["road", "Ruta vial"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={mapView === id}
+                className={mapView === id ? "active" : ""}
+                onClick={() => setMapView(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            aria-expanded={controlPanelOpen}
+            aria-controls="local-control-panel"
+            onClick={() => setControlPanelOpen((current) => !current)}
+          >
+            {controlPanelOpen ? "Ocultar controles" : "Mostrar controles"}
+          </button>
+          <button
+            type="button"
+            aria-pressed={mapExpanded}
+            onClick={() => setMapExpanded((current) => !current)}
+          >
+            {mapExpanded ? "Salir de mapa ampliado" : "Ampliar mapa"}
+          </button>
+        </div>
+
+        <article id="local-control-panel" className="panel local-control-panel workspace-side-panel">
             <h3 className="panel-title">Controles locales</h3>
             <p className="panel-subtitle">
               Selecciona grupo, sector, criterio y vista para recalcular la secuencia.

@@ -1,17 +1,10 @@
-import { useState } from "react";
-import Sidebar from "./Sidebar";
+import AppHeader from "./AppHeader";
 
 export default function MainLayout({ children }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
   return (
     <div className="app-shell">
+      <AppHeader />
       <div className="app-body">
-        <Sidebar
-          isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen((prev) => !prev)}
-        />
-
         <main className="app-main">{children}</main>
       </div>
     </div>

@@ -1,9 +1,11 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
-import Dashboard from "./pages/Dashboard";
-import Agrupacion from "./pages/Agrupacion";
-import Sectorizacion from "./pages/Sectorizacion";
-import MapaOperativo from "./pages/MapaOperativo";
-import ExploracionLocal from "./pages/ExploracionLocal";
+import {
+  AgrupacionRoute,
+  DashboardRoute,
+  ExploracionLocalRoute,
+  MapaOperativoRoute,
+  SectorizacionRoute,
+} from "./routeElements";
 
 const router = createBrowserRouter([
   {
@@ -12,23 +14,23 @@ const router = createBrowserRouter([
   },
   {
     path: "/dashboard",
-    element: <Dashboard />,
+    element: <DashboardRoute />,
   },
   {
     path: "/agrupacion",
-    element: <Agrupacion />,
+    element: <AgrupacionRoute />,
   },
   {
     path: "/sectorizacion",
-    element: <Sectorizacion />,
+    element: <SectorizacionRoute />,
   },
   {
     path: "/mapa",
-    element: <MapaOperativo />,
+    element: <MapaOperativoRoute />,
   },
   {
     path: "/exploracion-local",
-    element: <ExploracionLocal />,
+    element: <ExploracionLocalRoute />,
   },
 ]);
 

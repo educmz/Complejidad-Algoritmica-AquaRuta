@@ -408,6 +408,13 @@ export default function Agrupacion() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
   const [failedSubrouteIds, setFailedSubrouteIds] = useState([]);
+  const [detailPanelOpen, setDetailPanelOpen] = useState(true);
+  const [mapExpanded, setMapExpanded] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
+    return () => window.clearTimeout(timer);
+  }, [detailPanelOpen, mapExpanded]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -947,7 +954,7 @@ export default function Agrupacion() {
 
   return (
     <MainLayout>
-      <section className="territory-page">
+      <section className={`territory-page workspace-page ${mapExpanded ? "workspace-expanded" : ""} ${detailPanelOpen ? "" : "panel-collapsed"}`}>
         {!isDetailOpen ? (
           <>
             <TerritoryTopFilters
@@ -1023,7 +1030,25 @@ export default function Agrupacion() {
               </div>
             </article>
 
-            <div className="territory-main-grid">
+            <div className="workspace-toolbar" aria-label="Herramientas de agrupacion">
+              <button
+                type="button"
+                aria-expanded={detailPanelOpen}
+                aria-controls="territory-side-panel"
+                onClick={() => setDetailPanelOpen((current) => !current)}
+              >
+                {detailPanelOpen ? "Ocultar detalle" : "Mostrar detalle"}
+              </button>
+              <button
+                type="button"
+                aria-pressed={mapExpanded}
+                onClick={() => setMapExpanded((current) => !current)}
+              >
+                {mapExpanded ? "Salir de mapa ampliado" : "Ampliar mapa"}
+              </button>
+            </div>
+
+            <div className="territory-main-grid workspace-map-layout">
               <TerritoryCoverageMap
                 viewMode={filters.viewMode}
                 blocks={activeBlock ? [activeBlock] : []}
@@ -1051,6 +1076,7 @@ export default function Agrupacion() {
                 onSelectNode={selectNode}
               />
 
+              <div id="territory-side-panel" className="workspace-side-panel">
               <TerritorySidePanel
                 viewMode={filters.viewMode}
                 block={activeBlock}
@@ -1061,6 +1087,7 @@ export default function Agrupacion() {
                 routeError={routeError}
                 onSelectNode={selectNode}
               />
+              </div>
             </div>
           </>
         )}
