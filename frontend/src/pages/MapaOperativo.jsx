@@ -4,17 +4,15 @@ import {
   CircleMarker,
   GeoJSON,
   MapContainer,
-  Marker,
   Popup,
   TileLayer,
   Tooltip,
 } from "react-leaflet";
-import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import MainLayout from "../components/layout/MainLayout";
+import EpsMapMarker from "../components/map/EpsMapMarker";
 import { aquaRutaData } from "../data/aquaRutaData";
 import { fetchRouteGeoJsonBatch } from "../services/mapApi";
-import { epsCoverageStatus, epsRequiresValidation } from "../utils/epsCoverage";
 
 const routeColors = {
   selected: "#2563eb",
@@ -23,6 +21,17 @@ const routeColors = {
   network: "#64748b",
   local: "#2563eb",
 };
+
+const markerPriorityColors = {
+  critica: { stroke: "#991b1b", fill: "#dc2626" },
+  alta: { stroke: "#9a3412", fill: "#ea580c" },
+  media: { stroke: "#92400e", fill: "#f59e0b" },
+  baja: { stroke: "#0f766e", fill: "#14b8a6" },
+};
+
+function priorityColor(value) {
+  return markerPriorityColors[value] || markerPriorityColors.baja;
+}
 
 const ORS_MAX_ALTERNATIVE_ROUTES = 3;
 const MAX_CANDIDATE_ROUTES = ORS_MAX_ALTERNATIVE_ROUTES + 2;
@@ -35,6 +44,12 @@ const criterionLabels = {
 };
 
 const DEFAULT_SECTOR_CRITERION = "mixto";
+const MAX_VISIBLE_OPERATIONAL_GROUP = 104;
+
+function isVisibleOperationalGroup(group) {
+  const match = String(group?.nombre || group?.id || group?.groupName || "").match(/\d+/);
+  return !match || Number(match[0]) <= MAX_VISIBLE_OPERATIONAL_GROUP;
+}
 
 function hasValidCenter(item) {
   const center = item?.center;
@@ -74,31 +89,6 @@ function formatTime(value) {
 
 function formatMoney(value) {
   return `S/ ${(Number(value) || 0).toFixed(2)}`;
-}
-
-function formatDecimal(value) {
-  if (!Number.isFinite(Number(value))) return "No disponible";
-  return Number(value).toFixed(3);
-}
-
-function formatPercent(value) {
-  if (!Number.isFinite(Number(value))) return "No disponible";
-  return `${(Number(value) * 100).toFixed(1)}%`;
-}
-
-function formatTrafficUpdatedAt(value) {
-  if (!value) return "No disponible";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No disponible";
-  return new Intl.DateTimeFormat("es-PE", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function trafficSourceLabel(value) {
-  if (value === "aquaruta_estimated") return "Estimación interna AquaRuta";
-  return value || "No disponible";
 }
 
 function summaryDistanceKm(geoJson) {
@@ -316,29 +306,6 @@ function buildRouteMetrics(distance, route) {
   };
 }
 
-function makeIcon(label, color) {
-  return L.divIcon({
-    className: "",
-    html: `
-      <div style="
-        align-items:center;
-        background:${color};
-        border:2px solid white;
-        border-radius:999px;
-        box-shadow:0 8px 18px rgba(15,23,42,.2);
-        color:white;
-        display:flex;
-        font:900 11px Inter, Arial, sans-serif;
-        height:36px;
-        justify-content:center;
-        width:36px;
-      ">${label}</div>
-    `,
-    iconAnchor: [18, 18],
-    iconSize: [36, 36],
-  });
-}
-
 function validLatLngs(points) {
   return points.filter(
     (point) =>
@@ -397,9 +364,9 @@ function CandidateRoutesMap({
       ? "Red local estimada. Se muestra como referencia operativa."
       : bestRoute?.routeType === "conceptual"
         ? "Referencia conceptual. No es una ruta vial validada."
-        : routes.length
+        : routes.length || mapView === "road"
           ? "Ruta vial por calles. La mejor alternativa se muestra en verde."
-          : "Completa la selección y calcula para ver rutas.";
+          : "Red local estimada. Se muestra como referencia operativa.";
 
   return (
     <article className="route-explorer-map-panel">
@@ -547,20 +514,11 @@ function CandidateRoutesMap({
             />
           ))}
 
-          {!routes.length && (
-            <div className="route-map-empty leaflet-control">
-              Selecciona grupo, sector y zona destino para calcular rutas candidatas.
-            </div>
-          )}
-
           {origin && (
-            <Marker position={[origin.lat, origin.lon]} icon={makeIcon("EPS", "#1d4ed8")}>
-              <Popup>
-                <strong>{origin.prestador}</strong>
-                <br />
-                EPS de referencia
-              </Popup>
-            </Marker>
+            <EpsMapMarker origin={origin}>
+              <br />
+              EPS de referencia
+            </EpsMapMarker>
           )}
 
           {destination?.center && (
@@ -568,10 +526,10 @@ function CandidateRoutesMap({
               center={destination.center}
               radius={10}
               pathOptions={{
-                color: "#166534",
-                fillColor: "#16a34a",
-                fillOpacity: 0.95,
-                weight: 3,
+                color: priorityColor(destination.criticidad).stroke,
+                fillColor: priorityColor(destination.criticidad).fill,
+                fillOpacity: 0.9,
+                weight: 2,
               }}
             >
               <Tooltip direction="top" opacity={0.95}>
@@ -611,8 +569,8 @@ export default function MapaOperativo() {
     [validDistricts]
   );
   const groupOptions = useMemo(
-    () =>
-      groupedZones.length
+    () => {
+      const groups = groupedZones.length
         ? groupedZones.map((group) => ({
             groupId: group.id,
             groupName: group.nombre,
@@ -624,7 +582,9 @@ export default function MapaOperativo() {
             groupName: group.groupName,
             zoneIds: [],
             zonesCount: group.groupZonesCount || 0,
-          })),
+          }));
+      return groups.filter(isVisibleOperationalGroup);
+    },
     [groupedZones, sectorizedZones]
   );
   const groupIds = groupOptions.map((group) => group.groupId);
@@ -636,7 +596,9 @@ export default function MapaOperativo() {
     [groupOptions, requestedDestinationId]
   );
   const [selectedGroupId, setSelectedGroupId] = useState(
-    groupIds.includes(requestedGroupId) ? requestedGroupId : requestedGroup?.groupId || ""
+    groupIds.includes(requestedGroupId)
+      ? requestedGroupId
+      : requestedGroup?.groupId || groupOptions[0]?.groupId || ""
   );
   const [selectedSectorKey, setSelectedSectorKey] = useState("");
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
@@ -658,12 +620,17 @@ export default function MapaOperativo() {
   const [selectedInfoRouteId, setSelectedInfoRouteId] = useState("");
   const [mapView, setMapView] = useState("road");
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [autoCalculationToken, setAutoCalculationToken] = useState(0);
   const routeRequestSeqRef = useRef(0);
   const routeAbortControllerRef = useRef(null);
   const routeLoadingRef = useRef(false);
+  const calculateButtonRef = useRef(null);
+  const lastAutoCalculationTokenRef = useRef(-1);
 
   const selectedGroup =
-    groupOptions.find((group) => group.groupId === selectedGroupId) || null;
+    groupOptions.find((group) => group.groupId === selectedGroupId) ||
+    groupOptions[0] ||
+    null;
   const selectedSectorizedGroup = selectedGroupId ? sectorizedZones[selectedGroupId] || null : null;
   const sectorOptions = useMemo(() => {
     const criteria = selectedSectorizedGroup?.criterios || {};
@@ -701,11 +668,13 @@ export default function MapaOperativo() {
   const selectedSector =
     sectorOptions.find((sector) => sector.key === selectedSectorKey) ||
     sectorOptions.find((sector) => (sector.zona_ids || []).includes(selectedDistrictId || initialDestinationId)) ||
+    sectorOptions[0] ||
     null;
   const districtOptions = useMemo(() => selectedSector?.zones || [], [selectedSector]);
   const selectedDistrict =
     districtOptions.find((district) => district.id === selectedDistrictId) ||
     districtOptions.find((district) => district.id === initialDestinationId) ||
+    districtOptions[0] ||
     null;
   const selectedDestination = selectedDistrict;
   const selectedOrigin = selectedDestination
@@ -723,7 +692,6 @@ export default function MapaOperativo() {
   const selectionComplete = Boolean(
     selectedGroup && selectedSector && selectedDistrict && selectedDestination && selectedOrigin
   );
-  const selectedOriginCoverage = epsCoverageStatus(selectedOrigin?.distanceToDestination);
 
   const routeRequestKey = useMemo(
     () =>
@@ -831,6 +799,22 @@ export default function MapaOperativo() {
     };
   }, []);
 
+  useEffect(() => {
+    if (
+      lastAutoCalculationTokenRef.current === autoCalculationToken ||
+      !selectionComplete ||
+      !routeRequestKey
+    ) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      if (!calculateButtonRef.current) return;
+      lastAutoCalculationTokenRef.current = autoCalculationToken;
+      calculateButtonRef.current.click();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [autoCalculationToken, routeRequestKey, selectionComplete]);
+
   function resetRouteState() {
     routeAbortControllerRef.current?.abort();
     routeRequestSeqRef.current += 1;
@@ -845,11 +829,13 @@ export default function MapaOperativo() {
   }
 
   function clearSelection() {
-    setSelectedGroupId("");
+    setSelectedGroupId(groupOptions[0]?.groupId || "");
     setSelectedSectorKey("");
     setSelectedDistrictId("");
     setCriterion("distancia");
+    setMapView("road");
     resetRouteState();
+    setAutoCalculationToken((current) => current + 1);
   }
 
   async function loadSelectedRoute() {
@@ -1000,7 +986,6 @@ export default function MapaOperativo() {
                       resetRouteState();
                     }}
                   >
-                    <option value="">Seleccionar grupo</option>
                     {groupOptions.map((group) => (
                       <option key={group.groupId} value={group.groupId}>
                         {group.groupName} ({group.zonesCount} zonas)
@@ -1021,7 +1006,6 @@ export default function MapaOperativo() {
                       resetRouteState();
                     }}
                   >
-                    <option value="">Seleccionar sector</option>
                     {sectorOptions.map((sector) => (
                       <option key={sector.key} value={sector.key}>
                         {sector.nombre} - {sector.cantidad_zonas} zonas
@@ -1041,7 +1025,6 @@ export default function MapaOperativo() {
                       resetRouteState();
                     }}
                   >
-                    <option value="">Seleccionar zona</option>
                     {districtOptions.map((district) => (
                       <option key={district.id} value={district.id}>
                         {district.nombre} - {district.provincia}
@@ -1082,32 +1065,9 @@ export default function MapaOperativo() {
                   </select>
                 </label>
 
-                <div className="route-origin-summary">
-                  <span>EPS de referencia</span>
-                  <strong>{selectedOrigin?.prestador || "No disponible"}</strong>
-                  <small>
-                    {selectedOrigin
-                      ? `${formatKm(selectedOrigin.distanceToDestination)} hasta el destino`
-                      : "Completa el destino para calcular la EPS"}
-                  </small>
-                  {selectedOrigin && (
-                    <span className={`territory-eps-status ${selectedOriginCoverage.key}`}>
-                      {selectedOriginCoverage.label}
-                    </span>
-                  )}
-                </div>
-
-                {epsRequiresValidation(selectedOriginCoverage) && (
-                  <div className="territory-route-status warning">
-                    <strong>Validación operativa requerida</strong>
-                    <span>
-                      La EPS de referencia requiere validación antes de usarla como origen de ruta.
-                    </span>
-                  </div>
-                )}
-
                 <div className="route-control-actions">
                   <button
+                    ref={calculateButtonRef}
                     className="route-calculate-button"
                     type="button"
                     disabled={routeLoading || !selectionComplete || !selectedRouteCoordinates}
@@ -1150,22 +1110,23 @@ export default function MapaOperativo() {
             }}
           />
 
-          <article className={`panel route-result-panel ${hasCalculatedRoutes ? "" : "empty"}`}>
+          <article className="panel route-result-panel">
             <h3 className="panel-title">Resultado</h3>
-            {hasCalculatedRoutes ? (
-              <div className="route-result-grid">
-                <div>
-                  <span>Origen</span>
-                  <strong>{selectedOrigin?.prestador || "No disponible"}</strong>
-                </div>
-                <div>
-                  <span>Destino</span>
-                  <strong>{selectedDestination?.nombre || "No disponible"}</strong>
-                </div>
-                <div>
-                  <span>Priorizar por</span>
-                  <strong>{criterionLabels[criterion]}</strong>
-                </div>
+            <div className="route-result-grid">
+              <div>
+                <span>Origen</span>
+                <strong>{selectedOrigin?.prestador || "No disponible"}</strong>
+              </div>
+              <div>
+                <span>Destino</span>
+                <strong>{selectedDestination?.nombre || "No disponible"}</strong>
+              </div>
+              <div>
+                <span>Priorizar por</span>
+                <strong>{criterionLabels[criterion]}</strong>
+              </div>
+              {hasCalculatedRoutes && (
+                <>
                 <div className="selected">
                   <span>Ruta candidata seleccionada</span>
                   <strong>{selectedRoute?.nombre}</strong>
@@ -1182,36 +1143,9 @@ export default function MapaOperativo() {
                   <span>Costo operativo estimado</span>
                   <strong>{formatMoney(selectedRoute?.cost)}</strong>
                 </div>
-                <section className="route-technical-metrics">
-                  <header>
-                    <strong>Métricas técnicas</strong>
-                    <small>Valores usados por el modelo para comparar rutas.</small>
-                  </header>
-                  <dl>
-                    <dt>Riesgo de bloqueo</dt>
-                    <dd>
-                      {selectedRoute?.routeType === "road"
-                        ? formatPercent(selectedRoute?.routeFragilityPenalty)
-                        : "No aplica"}
-                    </dd>
-                    <dt>Dificultad de ruta</dt>
-                    <dd>
-                      {selectedRoute?.routeType === "road"
-                        ? formatPercent(selectedRoute?.edgeOperationalWeight)
-                        : "No aplica"}
-                    </dd>
-                  </dl>
-                </section>
-              </div>
-            ) : (
-              <div className="route-result-empty">
-                {routeLoading
-                  ? "Calculando rutas sobre la red vial..."
-                  : selectionComplete
-                  ? "Calcula para ver el resultado."
-                  : "Selecciona grupo, sector y zona destino para calcular rutas candidatas."}
-              </div>
-            )}
+                </>
+              )}
+            </div>
 
             {hasCalculatedRoutes && selectedRoute?.routeType === "conceptual" && (
               <section className="conceptual-route-warning">
@@ -1220,22 +1154,6 @@ export default function MapaOperativo() {
                   No se encontró ruta vial por calles; se muestra referencia conceptual.
                 </span>
                 <small>No es una ruta vial validada.</small>
-              </section>
-            )}
-
-            {hasCalculatedRoutes && selectedRoute?.routeType === "road" && (
-              <section className="route-mode-status road">
-                <strong>Ruta vial calculada</strong>
-                <span>Geometría vial obtenida de OpenRouteService.</span>
-              </section>
-            )}
-
-            {hasCalculatedRoutes && selectedRoute?.routeType === "local" && (
-              <section className="route-mode-status local">
-                <strong>Red local estimada</strong>
-                <span>
-                  Conexión operativa local de referencia. No se presenta como ruta vial validada.
-                </span>
               </section>
             )}
 
@@ -1249,62 +1167,6 @@ export default function MapaOperativo() {
               </section>
             )}
 
-            {hasCalculatedRoutes && selectedRoute?.traffic && (
-              <section className="traffic-card" aria-label="Tráfico estimado">
-                <div className="traffic-card-heading">
-                  <h4>Tráfico</h4>
-                  <span className="traffic-badge estimated">Tráfico estimado</span>
-                </div>
-                <div className="traffic-grid">
-                  <div>
-                    <span>Tiempo sin tráfico</span>
-                    <strong>{formatTime(selectedRoute.traffic.baseDurationMin)}</strong>
-                  </div>
-                  <div>
-                    <span>Tiempo estimado con tráfico</span>
-                    <strong>{formatTime(selectedRoute.traffic.liveDurationMin)}</strong>
-                  </div>
-                  <div>
-                    <span>Demora estimada</span>
-                    <strong>{formatTime(selectedRoute.traffic.trafficDelayMin)}</strong>
-                  </div>
-                  <div>
-                    <span>Factor de tráfico</span>
-                    <strong>{formatDecimal(selectedRoute.traffic.trafficFactor)}</strong>
-                  </div>
-                  <div>
-                    <span>Fuente</span>
-                    <strong>{trafficSourceLabel(selectedRoute.traffic.trafficSource)}</strong>
-                  </div>
-                  <div>
-                    <span>Actualización</span>
-                    <strong>
-                      {formatTrafficUpdatedAt(selectedRoute.traffic.trafficUpdatedAt)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Estado</span>
-                    <strong>
-                      {selectedRoute.traffic.trafficIsStale
-                        ? "Estimación desactualizada"
-                        : "Tráfico estimado"}
-                    </strong>
-                  </div>
-                </div>
-                {selectedRoute.traffic.trafficMode === "estimated" && (
-                  <p className="traffic-warning">
-                    {selectedRoute.traffic.trafficWarning ||
-                      "Tráfico estimado por AquaRuta. No corresponde a tráfico vehicular en vivo."}
-                  </p>
-                )}
-              </section>
-            )}
-
-            <p className="territory-context-note">
-              Las rutas son candidatas de apoyo operativo. Deben validarse con condiciones reales
-              de tránsito, disponibilidad de vehículos y restricciones locales.
-            </p>
-
             {activeRouteError && (
               <div className="route-error-message">
                 <strong>No se pudo cargar la ruta</strong>
@@ -1312,10 +1174,10 @@ export default function MapaOperativo() {
               </div>
             )}
 
+            {hasCalculatedRoutes && (
             <div className="route-candidate-list">
               <div className="route-list-heading">
                 <span>Alternativas disponibles</span>
-                <small>Selecciona una alternativa para compararla en el mapa.</small>
               </div>
               {enrichedRoutes.map((route) => (
                 <button
@@ -1336,9 +1198,8 @@ export default function MapaOperativo() {
                     <strong>{route.nombre}</strong>
                     <span>{routeState(route)}</span>
                   </div>
-                  <small>{route.via}</small>
                   <em>
-                    {formatKm(route.distanceKm)} / {formatTime(route.timeMin)} / {formatMoney(route.cost)} / Riesgo: {formatPercent(route.routeFragilityPenalty)}
+                    {formatKm(route.distanceKm)} / {formatTime(route.timeMin)} / {formatMoney(route.cost)}
                   </em>
                   {route.traffic?.trafficDelayMin != null && (
                     <small className="route-traffic-summary">
@@ -1348,6 +1209,7 @@ export default function MapaOperativo() {
                 </button>
               ))}
             </div>
+            )}
           </article>
         </section>
       </section>

@@ -5752,3 +5752,108 @@ input:focus-visible {
     justify-content: flex-start;
   }
 }
+
+/* Mapa operativo compacto */
+
+.route-explorer-page {
+  gap: 8px;
+}
+
+.route-explorer-hero {
+  padding: 11px 15px;
+}
+
+.route-explorer-hero .page-title {
+  font-size: 1.22rem;
+}
+
+.route-explorer-hero .page-subtitle {
+  margin-top: 2px;
+}
+
+.route-explorer-controls {
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.route-explorer-controls .panel-title {
+  font-size: 0.92rem;
+  margin-bottom: 1px;
+}
+
+.route-explorer-controls .route-control-stack {
+  gap: 7px;
+  grid-template-columns:
+    minmax(135px, 0.9fr)
+    minmax(145px, 0.95fr)
+    minmax(170px, 1.1fr)
+    minmax(125px, 0.8fr)
+    minmax(125px, 0.8fr)
+    auto;
+}
+
+.route-explorer-controls .route-control-actions {
+  grid-column: auto;
+  justify-content: flex-start;
+}
+
+.route-explorer-layout {
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 24vw);
+}
+
+.route-explorer-map-heading {
+  padding: 10px 13px;
+}
+
+.route-result-panel {
+  padding: 11px;
+}
+
+.route-result-grid {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.route-result-grid div {
+  min-height: 50px;
+  padding: 8px 9px;
+}
+
+.route-result-grid strong {
+  font-size: 0.88rem;
+}
+
+.route-candidate-list {
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.route-candidate-list button {
+  padding: 8px 9px;
+}
+
+@media (max-width: 1180px) {
+  .route-explorer-controls .route-control-stack {
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+  }
+
+  .route-explorer-controls .route-control-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .route-explorer-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .route-explorer-controls .route-control-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .route-explorer-controls .route-control-actions {
+    justify-content: stretch;
+  }
+}
