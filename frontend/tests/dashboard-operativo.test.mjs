@@ -263,6 +263,7 @@ assert.equal(dashboard.includes("Alertas operativas"), false);
 assert.equal(dashboard.includes("Sin alertas operativas"), false);
 assert.equal(dashboard.includes("Datos geograficos incompletos"), false);
 assert.equal(dashboard.includes("distritos no pudieron representarse"), false);
+assert.equal(dashboard.includes("requiere sectorizacion"), false);
 assert.ok(dashboardGeo.includes("EPS seleccionada"));
 assert.equal(dashboard.includes("No hay EPS relacionadas con los filtros seleccionados."), true);
 

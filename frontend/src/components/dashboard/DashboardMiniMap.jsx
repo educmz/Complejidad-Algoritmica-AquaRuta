@@ -47,15 +47,15 @@ function MapFocus({ points, focusKey }) {
 const epsIcon = L.divIcon({
   className: "dashboard-eps-marker",
   html: '<span class="dashboard-eps-water-icon" aria-hidden="true"></span>',
-  iconSize: [44, 44],
-  iconAnchor: [22, 40],
+  iconSize: [32, 32],
+  iconAnchor: [16, 29],
 });
 
 const epsReferenceIcon = L.divIcon({
   className: "dashboard-eps-marker dashboard-eps-marker-reference",
   html: '<span class="dashboard-eps-water-icon" aria-hidden="true"></span>',
-  iconSize: [44, 44],
-  iconAnchor: [22, 40],
+  iconSize: [32, 32],
+  iconAnchor: [16, 29],
 });
 
 function isValidCoordinatePair(point) {

@@ -23,7 +23,6 @@ import {
 } from "../utils/dashboardGeo";
 
 const STORAGE_KEY = "aquaruta.dashboard.filters.v1";
-const GROUP_SECTOR_THRESHOLD = 8;
 
 const priorityLabels = {
   critica: "CRITICA",
@@ -706,15 +705,6 @@ export default function DashboardOperativo() {
                   <div className="dashboard-map-toolbar" aria-label="Controles del mapa">
                     <button
                       type="button"
-                      aria-label="Restablecer vista del mapa"
-                      title="Restablecer vista"
-                      onClick={() => setMapResetKey((value) => value + 1)}
-                    >
-                      <span className="toolbar-icon toolbar-icon-home" aria-hidden="true" />
-                      <span>Restablecer</span>
-                    </button>
-                    <button
-                      type="button"
                       aria-label={mapExpanded ? "Reducir mapa" : "Ampliar mapa"}
                       title={mapExpanded ? "Reducir mapa" : "Ampliar mapa"}
                       onClick={() => setMapExpanded((current) => !current)}
@@ -900,12 +890,6 @@ export default function DashboardOperativo() {
                         <span>
                           <strong>{formatCompact(group.visibleConnections)}</strong>{" "}
                           conexiones afectadas acumuladas
-                        </span>
-                        <span>
-                          <strong>
-                            {group.visibleZones > GROUP_SECTOR_THRESHOLD ? "Si" : "No"}
-                          </strong>{" "}
-                          requiere sectorizacion
                         </span>
                       </div>
                       <div className="dashboard-group-actions">
