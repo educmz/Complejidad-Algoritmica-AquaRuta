@@ -7,6 +7,7 @@ export async function runSectorization(request, options = {}) {
     fallbackError: "No se pudo sectorizar el grupo.",
     body: {
       groupId: request.groupId,
+      group: request.group || null,
       nodeIds: request.nodeIds || null,
       maxSectorSize: request.maxSectorSize || 8,
       splitCriterion: request.splitCriterion || "geografico",

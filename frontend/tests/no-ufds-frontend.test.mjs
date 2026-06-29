@@ -24,6 +24,7 @@ const contents = await Promise.all(
 );
 
 for (const [file, content] of contents) {
+  const normalizedFile = file.replaceAll("\\", "/");
   assert.equal(
     content.includes("ufdsGrouping"),
     false,
@@ -69,4 +70,16 @@ for (const [file, content] of contents) {
     false,
     `No debe existir una implementacion Divide y Venceras de sectorizacion activa en React en ${file}`
   );
+  if (!normalizedFile.endsWith("src/data/aquaRutaData.js")) {
+    assert.equal(
+      content.includes("sectorizedZones"),
+      false,
+      `No debe consumirse sectorizedZones exportado como fuente de sectores en ${file}`
+    );
+    assert.equal(
+      /precalculad/i.test(content),
+      false,
+      `No debe mostrarse ni dependerse de datos precalculados en ${file}`
+    );
+  }
 }

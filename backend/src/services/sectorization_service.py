@@ -110,7 +110,15 @@ class SectorizationService:
             self._static_grouped_zones,
         )
 
-    def _resolve_group(self, group_id: str):
+    def _resolve_group(self, group_id: str, group: dict[str, Any] | None = None):
+        if group is not None:
+            if str(group.get("id") or group.get("groupId") or "") != group_id:
+                raise SectorizationServiceError("El grupo enviado no coincide con groupId.")
+            if not isinstance(group.get("zona_ids"), list):
+                raise SectorizationServiceError("El grupo enviado no contiene zona_ids validos.")
+            normalized = dict(group)
+            normalized["id"] = group_id
+            return normalized
         group = next((item for item in self._groups() if item.get("id") == group_id), None)
         if not group:
             raise SectorizationServiceError("Grupo operativo no encontrado.")
@@ -151,6 +159,7 @@ class SectorizationService:
     def run(
         self,
         group_id: str,
+        group: dict[str, Any] | None = None,
         node_ids: list[str] | None = None,
         max_sector_size: int = DEFAULT_MAX_SECTOR_SIZE,
         split_criterion: str = "geografico",
@@ -170,7 +179,7 @@ class SectorizationService:
         if max_depth < 0 or max_depth > MAX_SECTORIZATION_DEPTH:
             raise SectorizationServiceError(f"maxDepth debe estar entre 0 y {MAX_SECTORIZATION_DEPTH}.")
 
-        group = self._resolve_group(group_id)
+        group = self._resolve_group(group_id, group)
         nodes = self._resolve_nodes(group, node_ids)
         result = sectorize_divide_and_conquer(
             nodes,

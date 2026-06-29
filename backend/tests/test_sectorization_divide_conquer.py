@@ -157,6 +157,28 @@ class SectorizationServiceTests(unittest.TestCase):
         self.assertEqual(response["sectors"][0]["sectorId"], "grupo-test-sector-1")
         self.assertIn("estimatedAffectedPeople", response["sectors"][0]["summary"])
 
+    def test_service_accepts_current_ufds_group_context(self):
+        current_group = {
+            "id": "grupo-ufds-actual",
+            "nombre": "Grupo UFDS Actual",
+            "zona_ids": [item["id"] for item in self.nodes[:4]],
+            "center": [-12, -77],
+        }
+        response = self.service.run(
+            "grupo-ufds-actual",
+            group=current_group,
+            max_sector_size=2,
+        )
+        output_ids = [
+            node["id"]
+            for sector in response["sectors"]
+            for node in sector["nodes"]
+        ]
+
+        self.assertEqual(response["group"]["groupId"], "grupo-ufds-actual")
+        self.assertEqual(set(output_ids), set(current_group["zona_ids"]))
+        self.assertTrue(all(sector["groupId"] == "grupo-ufds-actual" for sector in response["sectors"]))
+
     def test_service_warns_when_depth_prevents_size_limit(self):
         response = self.service.run("grupo-test", max_sector_size=2, max_depth=0)
 

@@ -112,5 +112,23 @@ class GroupingEndpointTests(unittest.TestCase):
             )
 
 
+class GroupingCatalogIntegrityTests(unittest.TestCase):
+    def test_current_unfiltered_catalog_has_stable_numeric_ids(self):
+        service = GroupingService(ROOT)
+        response = service.run(filters={}, config={})
+        group_ids = [group["id"] for group in response["groups"]]
+        numbers = sorted(int(group_id.split("-")[1]) for group_id in group_ids)
+
+        self.assertEqual(len(group_ids), response["summary"]["groupCount"])
+        self.assertEqual(len(group_ids), len(set(group_ids)))
+        self.assertEqual(numbers, list(range(1, max(numbers) + 1)))
+        self.assertIn("grupo-89", group_ids)
+        self.assertIn("grupo-102", group_ids)
+        self.assertTrue(
+            all(group.get("zona_ids") for group in response["groups"]),
+            "Todos los grupos del catalogo actual deben tener distritos.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

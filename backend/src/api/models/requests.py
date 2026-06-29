@@ -188,6 +188,7 @@ class SectorizationRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     groupId: str = Field(min_length=1)
+    group: dict[str, Any] | None = None
     nodeIds: list[str] | None = Field(default=None, max_length=500)
     maxSectorSize: int = Field(DEFAULT_MAX_SECTOR_SIZE, ge=1, le=MAX_SECTOR_SIZE_ALLOWED)
     splitCriterion: str = Field("geografico")

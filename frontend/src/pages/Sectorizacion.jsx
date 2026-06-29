@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   CircleMarker,
   MapContainer,
@@ -13,31 +14,24 @@ import MainLayout from "../components/layout/MainLayout";
 import SearchableCombobox from "../components/forms/SearchableCombobox";
 import MapToolbar from "../components/map/MapToolbar";
 import EpsMapMarker from "../components/map/EpsMapMarker";
-import { aquaRutaData } from "../data/aquaRutaData";
 import { runSectorization } from "../services/sectorizationApi";
-import { consolidateDashboardDistrictsAndGroups } from "../utils/dashboardGeo";
+import {
+  groupNumber,
+  groupToOption,
+  useOperationalGroups,
+} from "../hooks/useOperationalAlgorithms";
+import {
+  buildRouteContextPath,
+  readRouteContext,
+  writeRouteContext,
+} from "../utils/sharedRouteContext";
 
 const sectorColors = ["#2563eb", "#0f766e", "#ea580c", "#7c3aed", "#0891b2", "#be123c"];
-const DEFAULT_GROUP_ID = "grupo-1";
 const SECTORIZATION_STORAGE_KEY = "aquaruta:sectorization-state:v1";
-
-function readStoredSectorizationState() {
-  if (typeof window === "undefined") return {};
-  try {
-    return JSON.parse(window.localStorage.getItem(SECTORIZATION_STORAGE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
 
 function writeStoredSectorizationState(state) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(SECTORIZATION_STORAGE_KEY, JSON.stringify(state));
-}
-
-function groupNumber(groupId = "") {
-  const match = String(groupId).match(/grupo-(\d+)/i);
-  return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 }
 
 function formatNumber(value) {
@@ -257,17 +251,16 @@ function SectorMap({
 }
 
 export default function Sectorizacion() {
-  const [searchParams] = useSearchParams();
-  const storedSectorizationState = useMemo(() => readStoredSectorizationState(), []);
-  const rawGroupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
-  const rawDistricts = useMemo(() => aquaRutaData.districts || [], []);
-  const canonicalSectorizationData = useMemo(
-    () => consolidateDashboardDistrictsAndGroups(rawDistricts, rawGroupedZones),
-    [rawDistricts, rawGroupedZones]
-  );
-  const groupedZones = canonicalSectorizationData.groups;
-  const districts = canonicalSectorizationData.districts;
-  const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sharedContext = useMemo(() => readRouteContext(searchParams), [searchParams]);
+  const {
+    districts,
+    epsOrigins,
+    groups: groupedZones,
+    loadingGroups,
+    groupingError,
+  } = useOperationalGroups();
 
   const districtMap = useMemo(
     () => new Map(districts.map((district) => [district.id, district])),
@@ -276,25 +269,20 @@ export default function Sectorizacion() {
 
   const groupOptions = useMemo(
     () =>
-      groupedZones.map((group) => ({
-        groupId: group.id,
-        groupName: group.nombre,
-        groupZonesCount: group.zona_ids?.length ?? group.cantidad_zonas ?? 0,
-      }))
-        .filter((group) => group.groupZonesCount > 0)
+      groupedZones.map(groupToOption)
+        .filter((group) => group.zonesCount > 0)
         .sort((a, b) => groupNumber(a.groupId) - groupNumber(b.groupId) || a.groupName.localeCompare(b.groupName, "es")),
     [groupedZones]
   );
   const groupIds = groupOptions.map((group) => group.groupId);
   const requestedGroupId =
-    searchParams.get("grupo") || searchParams.get("groupId") || storedSectorizationState.groupId || "";
-  const requestedSectorId = searchParams.get("sectorId") || storedSectorizationState.sectorId || "";
+    searchParams.get("grupo") || searchParams.get("groupId") || sharedContext.groupId || "";
+  const requestedSectorId = searchParams.get("sectorId") || sharedContext.sectorId || "";
   const requestedDistrictId =
-    searchParams.get("districtId") || searchParams.get("distrito") || storedSectorizationState.districtId || "";
-  const defaultGroupId = groupIds.includes(DEFAULT_GROUP_ID) ? DEFAULT_GROUP_ID : groupIds[0] || "";
+    searchParams.get("districtId") || searchParams.get("distrito") || sharedContext.districtId || "";
 
   const [selectedGroupId, setSelectedGroupId] = useState(
-    groupIds.includes(requestedGroupId) ? requestedGroupId : defaultGroupId
+    groupIds.includes(requestedGroupId) ? requestedGroupId : ""
   );
   const [selectedSectorId, setSelectedSectorId] = useState(requestedSectorId);
   const [selectedDistrictId, setSelectedDistrictId] = useState(requestedDistrictId);
@@ -308,6 +296,18 @@ export default function Sectorizacion() {
   const [mapFocusTick, setMapFocusTick] = useState(0);
 
   useEffect(() => {
+    if (!groupOptions.length) return;
+    const timer = window.setTimeout(() => {
+      setSelectedGroupId((current) => {
+        if (groupIds.includes(current)) return current;
+        if (groupIds.includes(requestedGroupId)) return requestedGroupId;
+        return "";
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [groupIds, groupOptions.length, requestedGroupId]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
     return () => window.clearTimeout(timer);
   }, [mapExpanded]);
@@ -318,7 +318,15 @@ export default function Sectorizacion() {
       sectorId: selectedSectorId,
       districtId: selectedDistrictId,
     });
-  }, [selectedDistrictId, selectedGroupId, selectedSectorId]);
+    writeRouteContext({
+      filters: sharedContext.filters,
+      groupId: selectedGroupId,
+      sectorId: selectedSectorId,
+      districtId: selectedDistrictId,
+      criterion: sharedContext.criterion,
+      mode: sharedContext.mode,
+    });
+  }, [selectedDistrictId, selectedGroupId, selectedSectorId, sharedContext]);
 
   const activeOption = groupOptions.find((group) => group.groupId === selectedGroupId) || null;
   const activeGroup = useMemo(
@@ -331,7 +339,9 @@ export default function Sectorizacion() {
             groupZonesCount: sectorizationPayload.group.inputNodes,
             groupInterruptions: sectorsSummaryInterruptions(sectorizationPayload.sectors),
           }
-        : activeOption,
+        : activeOption
+          ? { ...activeOption, groupZonesCount: activeOption.zonesCount }
+          : null,
     [activeOption, sectorizationPayload]
   );
 
@@ -390,8 +400,8 @@ export default function Sectorizacion() {
   }, [districtMap, epsOrigins, rawSectors]);
 
   const activeSector = useMemo(() => {
-    if (!sectors.length) return null;
-    return sectors.find((sector) => sector.id === selectedSectorId) || sectors[0];
+    if (!sectors.length || !selectedSectorId) return null;
+    return sectors.find((sector) => sector.id === selectedSectorId) || null;
   }, [sectors, selectedSectorId]);
 
   const mapFocusKey = [
@@ -413,6 +423,17 @@ export default function Sectorizacion() {
       return () => window.clearTimeout(timer);
     }
 
+    if (!activeOption?.sourceGroup) {
+      const timer = window.setTimeout(() => {
+        setSectorizationPayload(null);
+        setSectorizationError(groupingError || "");
+        setSectorizationStatus(loadingGroups ? "loading" : "error");
+        setSelectedSectorId("");
+        setSelectedDistrictId("");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setSectorizationPayload(null);
@@ -422,12 +443,15 @@ export default function Sectorizacion() {
       setSelectedDistrictId("");
     }, 0);
 
-    runSectorization({ groupId: selectedGroupId }, { signal: controller.signal })
+    runSectorization(
+      { groupId: selectedGroupId, group: activeOption?.sourceGroup },
+      { signal: controller.signal }
+    )
       .then((payload) => {
         if (controller.signal.aborted) return;
         const availableSectors = payload.sectors || [];
-        const preferredSectorId = requestedSectorId || storedSectorizationState.sectorId || "";
-        const preferredDistrictId = requestedDistrictId || storedSectorizationState.districtId || "";
+        const preferredSectorId = requestedSectorId || "";
+        const preferredDistrictId = requestedDistrictId || "";
         const preferredSector = availableSectors.find(
           (sector) => sector.sectorId === preferredSectorId
         );
@@ -453,7 +477,15 @@ export default function Sectorizacion() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [requestedDistrictId, requestedSectorId, selectedGroupId, sectorizationRetryToken, storedSectorizationState.districtId, storedSectorizationState.sectorId]);
+  }, [
+    activeOption?.sourceGroup,
+    groupingError,
+    loadingGroups,
+    requestedDistrictId,
+    requestedSectorId,
+    selectedGroupId,
+    sectorizationRetryToken,
+  ]);
 
   function handleGroupChange(groupId) {
     const nextGroupId = groupId === "todos" ? "" : groupId;
@@ -465,8 +497,38 @@ export default function Sectorizacion() {
     setSelectedDistrictId("");
   }
 
+  function handleClearSectorSelection() {
+    setSelectedSectorId("");
+    setSelectedDistrictId("");
+    setMapFocusTick((current) => current + 1);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("sectorId");
+    nextParams.delete("districtId");
+    nextParams.delete("distrito");
+    setSearchParams(nextParams, { replace: true });
+    writeStoredSectorizationState({
+      groupId: selectedGroupId,
+      sectorId: "",
+      districtId: "",
+    });
+  }
+
+  function openContext(path) {
+    if (!selectedGroupId || !selectedSectorId) return;
+    const context = {
+      filters: sharedContext.filters,
+      groupId: selectedGroupId,
+      sectorId: selectedSectorId,
+      districtId: selectedDistrictId,
+      criterion: sharedContext.criterion,
+      mode: path === "/mapa" ? "recorrido" : sharedContext.mode,
+    };
+    writeRouteContext(context);
+    navigate(buildRouteContextPath(path, context));
+  }
+
   const hasResults = sectorizationStatus === "success" && sectors.length > 0;
-  const groupDistrictCount = sectorizationPayload?.summary?.inputNodes || activeOption?.groupZonesCount || 0;
+  const groupDistrictCount = sectorizationPayload?.summary?.inputNodes || activeOption?.zonesCount || 0;
 
   return (
     <MainLayout>
@@ -507,6 +569,14 @@ export default function Sectorizacion() {
               onChange={handleGroupChange}
               allowClear={false}
             />
+            <button
+              type="button"
+              className="dashboard-soft-button dashboard-filter-clear"
+              onClick={handleClearSectorSelection}
+              disabled={!selectedSectorId}
+            >
+              Limpiar selección
+            </button>
           </div>
 
           {hasResults && (
@@ -593,13 +663,33 @@ export default function Sectorizacion() {
           <aside className="sector-detail-panel">
             {!activeSector ? (
               <div className="empty-state">
-                No fue posible sectorizar este grupo.
+                Selecciona un sector para revisar su detalle.
               </div>
             ) : (
               <>
                 <div className="sector-detail-heading">
                   <span>Sector seleccionado</span>
                   <h3>{activeSector.nombre}</h3>
+                </div>
+                <div className="sector-context-actions">
+                  <button
+                    type="button"
+                    className="dashboard-soft-button"
+                    aria-label="Ver sector seleccionado en mapa operativo"
+                    disabled={!activeSector}
+                    onClick={() => openContext("/mapa")}
+                  >
+                    Ver en mapa
+                  </button>
+                  <button
+                    type="button"
+                    className="dashboard-soft-button"
+                    aria-label="Explorar sector seleccionado localmente"
+                    disabled={!activeSector}
+                    onClick={() => openContext("/exploracion-local")}
+                  >
+                    Explorar localmente
+                  </button>
                 </div>
                 <span className={badgeClass(activeSector.criticidad)}>{activeSector.criticidad}</span>
                 <div className="sector-detail-grid">

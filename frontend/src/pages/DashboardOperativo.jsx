@@ -1,9 +1,10 @@
 ﻿import { useMemo, useState } from "react";
-import { useId, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
 import DashboardMiniMap from "../components/dashboard/DashboardMiniMap";
 import { aquaRutaData } from "../data/aquaRutaData";
+import { useOperationalGroups } from "../hooks/useOperationalAlgorithms";
 import {
   buildDashboardOptions,
   buildDashboardPath,
@@ -18,7 +19,6 @@ import {
 import {
   buildRelatedEpsContext,
   buildSelectedEpsContext,
-  consolidateDashboardDistrictsAndGroups,
   repairText,
 } from "../utils/dashboardGeo";
 
@@ -265,18 +265,24 @@ export default function DashboardOperativo() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const metadata = useMemo(() => aquaRutaData.metadata || {}, []);
-  const rawDistricts = useMemo(() => aquaRutaData.districts || [], []);
-  const rawGroupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
-  const canonicalDashboardData = useMemo(
-    () => consolidateDashboardDistrictsAndGroups(rawDistricts, rawGroupedZones),
-    [rawDistricts, rawGroupedZones]
-  );
-  const allDistricts = canonicalDashboardData.districts;
-  const groupedZones = canonicalDashboardData.groups;
+  const {
+    districts: allDistricts,
+    groups: groupedZones,
+    loadingGroups,
+    groupingError,
+  } = useOperationalGroups();
   const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
   const [filters, setFilters] = useState(() =>
-    sanitizeDashboardFilters(allDistricts, groupedZones, loadStoredFilters(searchParams))
+    normalizeDashboardFilters(loadStoredFilters(searchParams))
   );
+
+  useEffect(() => {
+    if (loadingGroups) return;
+    const timer = window.setTimeout(() => {
+      setFilters((current) => sanitizeDashboardFilters(allDistricts, groupedZones, current));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [allDistricts, groupedZones, loadingGroups]);
 
   const districtMap = useMemo(
     () => new Map(allDistricts.map((district) => [district.id, district])),
@@ -343,7 +349,8 @@ export default function DashboardOperativo() {
     [filteredDistricts]
   );
   const visibleGroups = useMemo(() => {
-    return groupedZones
+    const sourceGroups = selectedGroup ? [selectedGroup] : groupedZones;
+    return sourceGroups
       .map((group) => {
         const groupDistricts = (group.zona_ids || [])
           .map((id) => districtMap.get(id))
@@ -384,7 +391,7 @@ export default function DashboardOperativo() {
           b.visibleConnections - a.visibleConnections ||
           b.visibleInterruptions - a.visibleInterruptions
       );
-  }, [districtMap, filteredIds, groupedZones]);
+  }, [districtMap, filteredIds, groupedZones, selectedGroup]);
 
   const maxConnections = useMemo(
     () =>
@@ -486,7 +493,9 @@ export default function DashboardOperativo() {
     {
       label: "Grupos del contexto",
       value: formatNumber(visibleGroups.length),
-      helper: `${formatNumber(groupedZones.length)} grupos precalculados`,
+      helper: groupedZones.length
+        ? `De ${formatNumber(groupedZones.length)} grupos operativos`
+        : "Segun los filtros aplicados",
       tone: "green",
       path: buildDashboardPath("/agrupacion", filters),
     },
@@ -598,11 +607,12 @@ export default function DashboardOperativo() {
 
         {!filteredDistricts.length ? (
           <article className="panel dashboard-empty-context">
-            <h3>No existen registros para los filtros seleccionados.</h3>
-            <p>Prueba con otro territorio o limpia los filtros para volver al panorama general.</p>
-            <button type="button" className="dashboard-soft-button" onClick={clearFilters}>
-              Limpiar filtros
-            </button>
+            <h3>
+              {loadingGroups ? "Calculando grupos operativos..." : "No existen registros para los filtros seleccionados."}
+            </h3>
+            <p>
+              {groupingError || "Prueba con otro territorio o limpia los filtros para volver al panorama general."}
+            </p>
           </article>
         ) : (
           <>

@@ -10,6 +10,8 @@ import { DEFAULT_GROUPING_CONFIG, runGrouping } from "../services/groupingApi";
 import { aquaRutaData } from "../data/aquaRutaData";
 import { epsCoverageStatus } from "../utils/epsCoverage";
 import { consolidateDashboardDistrictsAndGroups } from "../utils/dashboardGeo";
+import { emptyDashboardFilters } from "../utils/dashboardFilters";
+import { buildRouteContextPath, writeRouteContext } from "../utils/sharedRouteContext";
 
 const priorityRank = { critica: 4, alta: 3, media: 2, baja: 1 };
 const statusLabels = {
@@ -173,37 +175,14 @@ export default function Agrupacion() {
   const groupingFilterKey = searchParams.toString();
   const storedGroupingState = useMemo(() => readStoredGroupingState(), []);
   const districts = useMemo(() => aquaRutaData.districts || [], []);
-  const rawGroupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
   const canonicalGroupingData = useMemo(
-    () => consolidateDashboardDistrictsAndGroups(districts, rawGroupedZones),
-    [districts, rawGroupedZones]
+    () => consolidateDashboardDistrictsAndGroups(districts, []),
+    [districts]
   );
   const canonicalDistricts = canonicalGroupingData.districts;
-  const precalculatedGroupedZones = canonicalGroupingData.groups.filter(
-    (group) => (group.zona_ids || []).length > 0
-  );
   const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
   const operationalRoutes = useMemo(() => aquaRutaData.operationalRoutes || {}, []);
-  const initialCriterionFromData = useMemo(
-    () => aquaRutaData.groupedZones?.[0]?.criterio_agrupación || null,
-    []
-  );
-  const [groupingConfig] = useState(() => ({
-    ...DEFAULT_GROUPING_CONFIG,
-    criterio: initialCriterionFromData?.criterio || DEFAULT_GROUPING_CONFIG.criterio,
-    umbral_distancia_geografica_km:
-      Number(initialCriterionFromData?.umbral_distancia_geografica_km) ||
-      DEFAULT_GROUPING_CONFIG.umbral_distancia_geografica_km,
-    umbral_distancia_vial_km:
-      Number(initialCriterionFromData?.umbral_distancia_vial_km) ||
-      DEFAULT_GROUPING_CONFIG.umbral_distancia_vial_km,
-    umbral_tiempo_min:
-      Number(initialCriterionFromData?.umbral_tiempo_min) ||
-      DEFAULT_GROUPING_CONFIG.umbral_tiempo_min,
-    umbral_costo:
-      Number(initialCriterionFromData?.umbral_costo) ||
-      DEFAULT_GROUPING_CONFIG.umbral_costo,
-  }));
+  const [groupingConfig] = useState(() => ({ ...DEFAULT_GROUPING_CONFIG }));
   const groupingFilters = useMemo(
     () => {
       const params = new URLSearchParams(groupingFilterKey);
@@ -224,18 +203,16 @@ export default function Agrupacion() {
     }),
     [groupingConfig, groupingFilters]
   );
-  const [groupedZones, setGroupedZones] = useState(precalculatedGroupedZones);
-  const [groupingStatus, setGroupingStatus] = useState(
-    precalculatedGroupedZones.length ? "idle" : "loading"
-  );
+  const [groupedZones, setGroupedZones] = useState([]);
+  const [groupingStatus, setGroupingStatus] = useState("loading");
   const [groupingError, setGroupingError] = useState("");
   const [groupingRunToken, setGroupingRunToken] = useState(0);
 
-  const requestedGroupId = searchParams.get("grupo") || storedGroupingState.activeBlockId || "";
+  const requestedGroupId = searchParams.get("grupo") || searchParams.get("groupId") || "";
   const requestedDistrictId =
-    searchParams.get("distrito") || storedGroupingState.activeNodeId || "";
+    searchParams.get("distrito") || searchParams.get("districtId") || "";
   const requestedCriticity =
-    searchParams.get("criticidad") || storedGroupingState.filters?.criticidad || "todas";
+    searchParams.get("criticidad") || "todas";
 
   const districtMap = useMemo(
     () => new Map(canonicalDistricts.map((district) => [district.id, district])),
@@ -248,15 +225,17 @@ export default function Agrupacion() {
 
   const [filters, setFilters] = useState({
     ...initialFilters,
-    ...(storedGroupingState.filters || {}),
-    blockId: requestedGroup?.id || districtGroup?.id || "todos",
+    departamento: searchParams.get("departamento") || "todos",
+    provincia: searchParams.get("provincia") || "todos",
+    distrito: requestedDistrictId || "todos",
+    blockId: requestedGroupId || requestedGroup?.id || districtGroup?.id || "todos",
     criticidad: ["critica", "alta", "media", "baja"].includes(requestedCriticity)
       ? requestedCriticity
-      : storedGroupingState.filters?.criticidad || "todas",
-    viewMode: requestedDistrictId || requestedGroup ? "nodos" : "grupos",
+      : "todas",
+    viewMode: requestedDistrictId || requestedGroupId ? "nodos" : "grupos",
   });
   const [isDetailOpen, setIsDetailOpen] = useState(
-    Boolean(requestedGroup || districtGroup || storedGroupingState.isDetailOpen)
+    Boolean(requestedGroupId || requestedDistrictId)
   );
   const [layers] = useState(initialLayers);
   const [statusOverrides] = useState({});
@@ -265,7 +244,7 @@ export default function Agrupacion() {
   const [pageSize, setPageSize] = useState(Number(storedGroupingState.pageSize) || 20);
   const [page, setPage] = useState(Number(storedGroupingState.page) || 1);
   const [activeBlockId, setActiveBlockId] = useState(
-    requestedGroup?.id || districtGroup?.id || groupedZones[0]?.id || ""
+    requestedGroupId || requestedGroup?.id || districtGroup?.id || ""
   );
   const [activeNodeId, setActiveNodeId] = useState(requestedDistrictId);
   const [mapExpanded, setMapExpanded] = useState(false);
@@ -306,15 +285,36 @@ export default function Agrupacion() {
         setGroupingStatus(groups.length ? "success" : "empty");
 
         const groupIds = new Set(groups.map((group) => group.id));
+        const requestedBlock = groups.find(
+          (group) =>
+            group.id === requestedGroupId ||
+            (requestedDistrictId && (group.zona_ids || []).includes(requestedDistrictId))
+        );
+        if (requestedBlock) {
+          setActiveBlockId(requestedBlock.id);
+          setActiveNodeId(
+            (requestedBlock.zona_ids || []).includes(requestedDistrictId)
+              ? requestedDistrictId
+              : ""
+          );
+          setIsDetailOpen(true);
+          setFilters((current) => ({
+            ...current,
+            blockId: requestedBlock.id,
+            distrito: requestedDistrictId || current.distrito,
+            viewMode: "nodos",
+          }));
+          return;
+        }
+
         const selectedStillExists = activeBlockId && groupIds.has(activeBlockId);
         if (!selectedStillExists) {
-          const firstGroup = groups[0] || null;
-          setActiveBlockId(firstGroup?.id || "");
-          setActiveNodeId(firstGroup?.zona_ids?.[0] || "");
+          setActiveBlockId("");
+          setActiveNodeId("");
           setIsDetailOpen(false);
           setFilters((current) => ({
             ...current,
-            blockId: firstGroup?.id || "todos",
+            blockId: "todos",
             viewMode: "grupos",
           }));
           return;
@@ -340,7 +340,7 @@ export default function Agrupacion() {
       window.clearTimeout(loadingTimer);
       controller.abort();
     };
-  }, [activeBlockId, activeNodeId, districts, groupingRequest, groupingRunToken]);
+  }, [activeBlockId, activeNodeId, districts, groupingRequest, groupingRunToken, requestedDistrictId, requestedGroupId]);
 
   const blocks = useMemo(() => {
     return groupedZones
@@ -479,7 +479,7 @@ export default function Agrupacion() {
     );
   }, [blocks, epsOrigins, statusOverrides]);
 
-  const activeBlock = blockById.get(activeBlockId) || blocks[0] || null;
+  const activeBlock = blockById.get(activeBlockId) || null;
   const detailNodes = useMemo(() => {
     if (!activeBlock) return [];
 
@@ -650,6 +650,9 @@ export default function Agrupacion() {
     setSortBy("criticidad");
     setPageSize(20);
     setPage(1);
+    setActiveBlockId("");
+    setActiveNodeId("");
+    setIsDetailOpen(false);
     navigate("/agrupacion", { replace: true });
   }
 
@@ -680,9 +683,12 @@ export default function Agrupacion() {
 
   function closeGroupDetail() {
     setIsDetailOpen(false);
+    setActiveBlockId("");
+    setActiveNodeId("");
     setFilters((current) => ({
       ...current,
       blockId: "todos",
+      distrito: "todos",
       viewMode: "grupos",
     }));
     navigate("/agrupacion", { replace: true });
@@ -700,7 +706,19 @@ export default function Agrupacion() {
 
   function openSectorization() {
     if (!activeBlock?.id || activeBlock.groupType !== "sectorizable") return;
-    navigate(`/sectorizacion?groupId=${encodeURIComponent(activeBlock.id)}`);
+    const context = {
+      filters: {
+        ...emptyDashboardFilters(),
+        departamento: filters.departamento,
+        provincia: filters.provincia,
+        distrito: activeNodeId || filters.distrito,
+        grupo: activeBlock.id,
+      },
+      groupId: activeBlock.id,
+      districtId: activeNodeId || "",
+    };
+    writeRouteContext(context);
+    navigate(buildRouteContextPath("/sectorizacion", context));
   }
 
   return (
@@ -749,12 +767,12 @@ export default function Agrupacion() {
               </div>
             )}
 
-            {groupingStatus !== "error" && groupingStatus !== "empty" && (
+            {groupingStatus === "success" && (
               <TerritoryGroupTable
                 key={`${search}|${sortBy}|${pageSize}|${filters.criticidad}|${filters.epsOriginId}|${filters.zoneSize}|${filters.departamento}|${filters.provincia}|${filters.distrito}`}
                 blocks={searchedBlocks}
-                totalGroups={canonicalGroupingData.groups.length}
-                activeBlockId={activeBlock?.id}
+                totalGroups={groupedZones.length}
+                activeBlockId={activeBlockId}
                 pageSize={pageSize}
                 page={page}
                 onPageChange={setPage}

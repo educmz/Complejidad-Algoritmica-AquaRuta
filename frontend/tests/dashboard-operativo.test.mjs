@@ -227,7 +227,11 @@ const groupMemberships = canonicalDashboard.groups.filter((group) =>
 assert.equal(canonicalAte.length, 1);
 assert.equal(canonicalAte[0].interrupciones, 1265);
 assert.equal(canonicalAte[0].center[0], -12.026389);
-assert.equal(groupMemberships.length, 1);
+assert.equal(groupMemberships.length, 2);
+assert.ok(
+  groupMemberships.every((group) => new Set(group.zona_ids || []).size === (group.zona_ids || []).length),
+  "La consolidacion no debe duplicar distritos dentro del mismo grupo"
+);
 assert.equal(canonicalDashboard.stats.before - canonicalDashboard.stats.after >= 1, true);
 
 const geoAudit = buildDashboardGeoAudit(districts);

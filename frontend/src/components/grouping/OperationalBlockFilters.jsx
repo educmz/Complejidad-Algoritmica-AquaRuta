@@ -21,7 +21,6 @@ export default function OperationalBlockFilters({
   layers,
   onFilterChange,
   onLayerChange,
-  onReset,
 }) {
   return (
     <article className="panel operational-filters-panel">
@@ -229,10 +228,6 @@ export default function OperationalBlockFilters({
           </label>
         ))}
       </div>
-
-      <button type="button" className="operational-reset-button" onClick={onReset}>
-        Limpiar filtros
-      </button>
     </article>
   );
 }

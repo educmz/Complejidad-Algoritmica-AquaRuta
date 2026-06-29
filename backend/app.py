@@ -316,6 +316,7 @@ def run_sectorization(payload: SectorizationRunRequest):
     try:
         return sectorization_service.run(
             group_id=payload.groupId,
+            group=payload.group,
             node_ids=payload.nodeIds,
             max_sector_size=payload.maxSectorSize,
             split_criterion=payload.splitCriterion,

@@ -10,9 +10,25 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import MainLayout from "../components/layout/MainLayout";
+import SearchableCombobox from "../components/forms/SearchableCombobox";
 import EpsMapMarker from "../components/map/EpsMapMarker";
-import { aquaRutaData } from "../data/aquaRutaData";
+import {
+  groupToOption,
+  useCurrentSectorization,
+  useOperationalGroups,
+} from "../hooks/useOperationalAlgorithms";
 import { fetchRouteGeoJsonBatch } from "../services/mapApi";
+import {
+  buildDashboardOptions,
+  dashboardFiltersToSearch,
+  emptyDashboardFilters,
+  sanitizeDashboardFilters,
+} from "../utils/dashboardFilters";
+import {
+  buildRouteContextSearch,
+  readRouteContext,
+  writeRouteContext,
+} from "../utils/sharedRouteContext";
 
 const routeColors = {
   selected: "#2563eb",
@@ -44,12 +60,6 @@ const criterionLabels = {
 };
 
 const DEFAULT_SECTOR_CRITERION = "mixto";
-const MAX_VISIBLE_OPERATIONAL_GROUP = 104;
-
-function isVisibleOperationalGroup(group) {
-  const match = String(group?.nombre || group?.id || group?.groupName || "").match(/\d+/);
-  return !match || Number(match[0]) <= MAX_VISIBLE_OPERATIONAL_GROUP;
-}
 
 function hasValidCenter(item) {
   const center = item?.center;
@@ -549,16 +559,20 @@ function CandidateRoutesMap({
 }
 
 export default function MapaOperativo() {
-  const [searchParams] = useSearchParams();
-  const districts = useMemo(() => aquaRutaData.districts || [], []);
-  const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
-  const groupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
-  const sectorizedZones = useMemo(() => aquaRutaData.sectorizedZones || {}, []);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialContext = useMemo(() => readRouteContext(searchParams), [searchParams]);
+  const {
+    districts,
+    epsOrigins,
+    groups: groupedZones,
+    loadingGroups,
+  } = useOperationalGroups();
 
-  const requestedGroupId = searchParams.get("grupo") || "";
+  const requestedGroupId = initialContext.groupId || "";
   const requestedDestinationId =
-    searchParams.get("distrito") || searchParams.get("destino") || "";
-  const requestedCriterion = searchParams.get("criterio") || "distancia";
+    initialContext.districtId || searchParams.get("destino") || "";
+  const requestedSectorId = initialContext.sectorId || "";
+  const requestedCriterion = initialContext.criterion || "distancia";
 
   const validDistricts = useMemo(
     () => districts.filter(hasValidCenter).sort((a, b) => a.nombre.localeCompare(b.nombre)),
@@ -568,24 +582,18 @@ export default function MapaOperativo() {
     () => new Map(validDistricts.map((district) => [district.id, district])),
     [validDistricts]
   );
+  const [filters, setFilters] = useState(() => initialContext.filters || emptyDashboardFilters());
+  const sanitizedFilters = useMemo(
+    () => sanitizeDashboardFilters(validDistricts, groupedZones, filters),
+    [filters, groupedZones, validDistricts]
+  );
+  const options = useMemo(
+    () => buildDashboardOptions(validDistricts, groupedZones, sanitizedFilters),
+    [groupedZones, sanitizedFilters, validDistricts]
+  );
   const groupOptions = useMemo(
-    () => {
-      const groups = groupedZones.length
-        ? groupedZones.map((group) => ({
-            groupId: group.id,
-            groupName: group.nombre,
-            zoneIds: group.zona_ids || [],
-            zonesCount: group.cantidad_zonas || group.zona_ids?.length || 0,
-          }))
-        : Object.values(sectorizedZones).map((group) => ({
-            groupId: group.groupId,
-            groupName: group.groupName,
-            zoneIds: [],
-            zonesCount: group.groupZonesCount || 0,
-          }));
-      return groups.filter(isVisibleOperationalGroup);
-    },
-    [groupedZones, sectorizedZones]
+    () => options.grupos.map(groupToOption),
+    [options.grupos]
   );
   const groupIds = groupOptions.map((group) => group.groupId);
   const requestedGroup = useMemo(
@@ -596,11 +604,13 @@ export default function MapaOperativo() {
     [groupOptions, requestedDestinationId]
   );
   const [selectedGroupId, setSelectedGroupId] = useState(
-    groupIds.includes(requestedGroupId)
+    groupIds.includes(sanitizedFilters.grupo)
+      ? sanitizedFilters.grupo
+      : groupIds.includes(requestedGroupId)
       ? requestedGroupId
-      : requestedGroup?.groupId || groupOptions[0]?.groupId || ""
+      : requestedGroup?.groupId || ""
   );
-  const [selectedSectorKey, setSelectedSectorKey] = useState("");
+  const [selectedSectorKey, setSelectedSectorKey] = useState(requestedSectorId);
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
   const initialDestinationId =
     validDistricts.some((district) => district.id === requestedDestinationId)
@@ -620,61 +630,50 @@ export default function MapaOperativo() {
   const [selectedInfoRouteId, setSelectedInfoRouteId] = useState("");
   const [mapView, setMapView] = useState("road");
   const [mapExpanded, setMapExpanded] = useState(false);
-  const [autoCalculationToken, setAutoCalculationToken] = useState(0);
   const routeRequestSeqRef = useRef(0);
   const routeAbortControllerRef = useRef(null);
   const routeLoadingRef = useRef(false);
-  const calculateButtonRef = useRef(null);
-  const lastAutoCalculationTokenRef = useRef(-1);
+
+  useEffect(() => {
+    if (loadingGroups || !groupOptions.length) return;
+    const timer = window.setTimeout(() => {
+      setSelectedGroupId((current) => {
+        if (groupOptions.some((group) => group.groupId === sanitizedFilters.grupo)) return sanitizedFilters.grupo;
+        if (groupOptions.some((group) => group.groupId === requestedGroupId)) return requestedGroupId;
+        if (requestedGroup?.groupId) return requestedGroup.groupId;
+        if (groupOptions.some((group) => group.groupId === current)) return current;
+        return "";
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [groupOptions, loadingGroups, requestedGroup?.groupId, requestedGroupId, sanitizedFilters.grupo]);
+
+  useEffect(() => {
+    if (dashboardFiltersToSearch(sanitizedFilters).toString() === dashboardFiltersToSearch(filters).toString()) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setFilters(sanitizedFilters), 0);
+    return () => window.clearTimeout(timer);
+  }, [filters, sanitizedFilters]);
 
   const selectedGroup =
-    groupOptions.find((group) => group.groupId === selectedGroupId) ||
-    groupOptions[0] ||
-    null;
-  const selectedSectorizedGroup = selectedGroupId ? sectorizedZones[selectedGroupId] || null : null;
-  const sectorOptions = useMemo(() => {
-    const criteria = selectedSectorizedGroup?.criterios || {};
-    const criterionKey = criteria[DEFAULT_SECTOR_CRITERION]
-      ? DEFAULT_SECTOR_CRITERION
-      : Object.keys(criteria)[0] || "";
-    const byCount = criteria[criterionKey] || {};
-    const sectorCount = byCount["3"] ? "3" : Object.keys(byCount)[0] || "";
-    const sectors = (byCount[sectorCount] || []).map((sector) => ({
-      ...sector,
-      key: `${criterionKey}:${sectorCount}:${sector.id}`,
-      zones: (sector.zona_ids || [])
-        .map((id) => districtMap.get(id))
-        .filter(Boolean)
-        .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    }));
-    if (sectors.length || !selectedGroup) return sectors;
-    const zones = (selectedGroup.zoneIds || [])
-      .map((id) => districtMap.get(id))
-      .filter(Boolean)
-      .sort((a, b) => a.nombre.localeCompare(b.nombre));
-    return zones.length
-      ? [
-          {
-            id: `${selectedGroup.groupId}-sector-unico`,
-            key: `grupo:${selectedGroup.groupId}:sector-unico`,
-            nombre: "Sector unico",
-            cantidad_zonas: zones.length,
-            zona_ids: zones.map((zone) => zone.id),
-            zones,
-          },
-        ]
-      : [];
-  }, [districtMap, selectedGroup, selectedSectorizedGroup]);
+    groupOptions.find((group) => group.groupId === selectedGroupId) || null;
+  const {
+    sectors: sectorOptions,
+    loadingSectors,
+    sectorizationError,
+  } = useCurrentSectorization(selectedGroup, districtMap, {
+    splitCriterion: DEFAULT_SECTOR_CRITERION,
+  });
   const selectedSector =
     sectorOptions.find((sector) => sector.key === selectedSectorKey) ||
+    sectorOptions.find((sector) => sector.id === requestedSectorId) ||
     sectorOptions.find((sector) => (sector.zona_ids || []).includes(selectedDistrictId || initialDestinationId)) ||
-    sectorOptions[0] ||
     null;
   const districtOptions = useMemo(() => selectedSector?.zones || [], [selectedSector]);
   const selectedDistrict =
     districtOptions.find((district) => district.id === selectedDistrictId) ||
     districtOptions.find((district) => district.id === initialDestinationId) ||
-    districtOptions[0] ||
     null;
   const selectedDestination = selectedDistrict;
   const selectedOrigin = selectedDestination
@@ -794,26 +793,28 @@ export default function MapaOperativo() {
   }, [mapExpanded]);
 
   useEffect(() => {
+    const context = {
+      filters: sanitizedFilters,
+      groupId: selectedGroupId,
+      sectorId: selectedSector?.id || "",
+      districtId: selectedDistrict?.id || selectedDistrictId || "",
+      criterion,
+      mode: mapView,
+    };
+    const nextSearch = buildRouteContextSearch(context);
+    if (nextSearch.toString() === searchParams.toString()) {
+      writeRouteContext(context);
+      return;
+    }
+    writeRouteContext(context);
+    setSearchParams(nextSearch, { replace: true });
+  }, [criterion, mapView, sanitizedFilters, searchParams, selectedDistrict?.id, selectedDistrictId, selectedGroupId, selectedSector?.id, setSearchParams]);
+
+  useEffect(() => {
     return () => {
       routeAbortControllerRef.current?.abort();
     };
   }, []);
-
-  useEffect(() => {
-    if (
-      lastAutoCalculationTokenRef.current === autoCalculationToken ||
-      !selectionComplete ||
-      !routeRequestKey
-    ) {
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      if (!calculateButtonRef.current) return;
-      lastAutoCalculationTokenRef.current = autoCalculationToken;
-      calculateButtonRef.current.click();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [autoCalculationToken, routeRequestKey, selectionComplete]);
 
   function resetRouteState() {
     routeAbortControllerRef.current?.abort();
@@ -828,14 +829,42 @@ export default function MapaOperativo() {
     setSelectedInfoRouteId("");
   }
 
-  function clearSelection() {
-    setSelectedGroupId(groupOptions[0]?.groupId || "");
+  function updateFilter(key, value) {
+    const next = { ...sanitizedFilters, [key]: value };
+    if (key === "eps") next.grupo = "todos";
+    if (key === "departamento") {
+      next.provincia = "todos";
+      next.distrito = "todos";
+      next.grupo = "todos";
+    }
+    if (key === "provincia") {
+      next.distrito = "todos";
+      next.grupo = "todos";
+    }
+    if (key === "distrito") next.grupo = "todos";
+    const sanitized = sanitizeDashboardFilters(validDistricts, groupedZones, next);
+    setFilters(sanitized);
+    if (key !== "grupo") {
+      setSelectedGroupId("");
+      setSelectedSectorKey("");
+      setSelectedDistrictId("");
+    } else {
+      setSelectedGroupId(value === "todos" ? "" : value);
+      setSelectedSectorKey("");
+      setSelectedDistrictId("");
+    }
+    resetRouteState();
+  }
+
+  function clearFilters() {
+    const empty = emptyDashboardFilters();
+    setFilters(empty);
+    setSelectedGroupId("");
     setSelectedSectorKey("");
     setSelectedDistrictId("");
     setCriterion("distancia");
     setMapView("road");
     resetRouteState();
-    setAutoCalculationToken((current) => current + 1);
   }
 
   async function loadSelectedRoute() {
@@ -973,123 +1002,137 @@ export default function MapaOperativo() {
         <article id="route-control-panel" className="panel route-explorer-controls workspace-side-panel">
               <h3 className="panel-title">Controles</h3>
               <div className="route-control-stack">
-                <label className="control-group">
-                  <span className="control-label">Grupo operativo</span>
-                  <select
-                    className="control-select"
-                    value={selectedGroupId}
-                    disabled={routeLoading}
-                    onChange={(event) => {
-                      setSelectedGroupId(event.target.value);
-                      setSelectedSectorKey("");
-                      setSelectedDistrictId("");
-                      resetRouteState();
-                    }}
-                  >
-                    {groupOptions.map((group) => (
-                      <option key={group.groupId} value={group.groupId}>
-                        {group.groupName} ({group.zonesCount} zonas)
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SearchableCombobox
+                  label="EPS"
+                  value={sanitizedFilters.eps}
+                  allLabel="Todas"
+                  options={options.eps.map((eps) => ({ value: eps, label: eps }))}
+                  onChange={(value) => updateFilter("eps", value)}
+                />
+                <SearchableCombobox
+                  label="Departamento"
+                  value={sanitizedFilters.departamento}
+                  allLabel="Todos"
+                  options={options.departamentos.map((department) => ({ value: department, label: department }))}
+                  onChange={(value) => updateFilter("departamento", value)}
+                />
+                <SearchableCombobox
+                  label="Provincia"
+                  value={sanitizedFilters.provincia}
+                  allLabel="Todas"
+                  options={options.provincias.map((province) => ({ value: province, label: province }))}
+                  onChange={(value) => updateFilter("provincia", value)}
+                />
+                <SearchableCombobox
+                  label="Distrito"
+                  value={sanitizedFilters.distrito}
+                  allLabel="Todos"
+                  options={options.distritos.map((district) => ({ value: district.id, label: district.nombre }))}
+                  onChange={(value) => updateFilter("distrito", value)}
+                />
+                <SearchableCombobox
+                  label="Grupo operativo"
+                  value={selectedGroupId || "todos"}
+                  allLabel="Todos"
+                  options={groupOptions.map((group) => ({
+                    value: group.groupId,
+                    label: `${group.groupName} (${group.zonesCount} zonas)`,
+                  }))}
+                  onChange={(value) => updateFilter("grupo", value)}
+                  allowClear={false}
+                />
 
-                <label className="control-group">
-                  <span className="control-label">Sector de atención</span>
-                  <select
-                    className="control-select"
-                    value={selectedSector?.key || ""}
-                    disabled={routeLoading || !selectedGroup}
-                    onChange={(event) => {
-                      setSelectedSectorKey(event.target.value);
-                      setSelectedDistrictId("");
-                      resetRouteState();
-                    }}
-                  >
-                    {sectorOptions.map((sector) => (
-                      <option key={sector.key} value={sector.key}>
-                        {sector.nombre} - {sector.cantidad_zonas} zonas
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SearchableCombobox
+                  label="Sector de atención"
+                  value={selectedSector?.key || "todos"}
+                  allLabel="Sin sector seleccionado"
+                  options={sectorOptions.map((sector) => ({
+                    value: sector.key,
+                    label: `${sector.nombre} - ${sector.cantidad_zonas} zonas`,
+                  }))}
+                  disabled={routeLoading || loadingSectors || !selectedGroup}
+                  onChange={(value) => {
+                    setSelectedSectorKey(value === "todos" ? "" : value);
+                    setSelectedDistrictId("");
+                    resetRouteState();
+                  }}
+                />
 
-                <label className="control-group">
-                  <span className="control-label">Zona destino</span>
-                  <select
-                    className="control-select"
-                    value={selectedDistrict?.id || ""}
-                    disabled={routeLoading || !selectedSector}
-                    onChange={(event) => {
-                      setSelectedDistrictId(event.target.value);
-                      resetRouteState();
-                    }}
-                  >
-                    {districtOptions.map((district) => (
-                      <option key={district.id} value={district.id}>
-                        {district.nombre} - {district.provincia}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {(loadingSectors || sectorizationError) && (
+                  <div className={`local-route-status ${sectorizationError ? "error" : "info"}`}>
+                    {sectorizationError || "Generando sectores actuales del grupo..."}
+                  </div>
+                )}
 
-                <label className="control-group">
-                  <span className="control-label">Priorizar por</span>
-                  <select
-                    className="control-select"
-                    value={criterion}
-                    disabled={routeLoading}
-                    onChange={(event) => {
-                      setCriterion(event.target.value);
-                    }}
-                  >
-                    <option value="distancia">Menor distancia</option>
-                    <option value="tiempo">Menor tiempo estimado</option>
-                    <option value="costo">Menor costo estimado</option>
-                    <option value="fragilidad">Menor riesgo de bloqueo</option>
-                  </select>
-                </label>
+                <SearchableCombobox
+                  label="Zona destino"
+                  value={selectedDistrict?.id || "todos"}
+                  allLabel="Sin zona seleccionada"
+                  options={districtOptions.map((district) => ({
+                    value: district.id,
+                    label: `${district.nombre} - ${district.provincia}`,
+                  }))}
+                  disabled={routeLoading || !selectedSector}
+                  onChange={(value) => {
+                    setSelectedDistrictId(value === "todos" ? "" : value);
+                    resetRouteState();
+                  }}
+                />
 
-                <label className="control-group">
-                  <span className="control-label">Tipo de visualización</span>
-                  <select
-                    className="control-select"
-                    value={mapView}
-                    onChange={(event) => {
-                      setMapView(event.target.value);
-                      resetRouteState();
-                    }}
-                  >
-                    <option value="road">Ruta vial</option>
-                    <option value="local">Red local</option>
-                  </select>
-                </label>
+                <SearchableCombobox
+                  label="Priorizar por"
+                  value={criterion}
+                  allLabel=""
+                  options={[
+                    { value: "distancia", label: "Menor distancia" },
+                    { value: "tiempo", label: "Menor tiempo estimado" },
+                    { value: "costo", label: "Menor costo estimado" },
+                    { value: "fragilidad", label: "Menor riesgo de bloqueo" },
+                  ]}
+                  disabled={routeLoading}
+                  onChange={setCriterion}
+                  allowClear={false}
+                  includeAllOption={false}
+                />
 
-                <div className="route-control-actions">
-                  <button
-                    ref={calculateButtonRef}
-                    className="route-calculate-button"
-                    type="button"
-                    disabled={routeLoading || !selectionComplete || !selectedRouteCoordinates}
-                    title={
-                      selectionComplete
-                        ? "Calcular rutas candidatas"
-                        : "Selecciona grupo, sector y zona destino para calcular"
-                    }
-                    onClick={loadSelectedRoute}
-                  >
-                    {routeLoading ? "Calculando..." : "Calcular rutas"}
-                  </button>
+                <SearchableCombobox
+                  label="Tipo de visualización"
+                  value={mapView}
+                  allLabel=""
+                  options={[
+                    { value: "road", label: "Ruta vial" },
+                    { value: "local", label: "Red local" },
+                  ]}
+                  onChange={(value) => {
+                    setMapView(value);
+                    resetRouteState();
+                  }}
+                  allowClear={false}
+                  includeAllOption={false}
+                />
 
-                  <button
-                    className="route-clear-button"
-                    type="button"
-                    disabled={routeLoading}
-                    onClick={clearSelection}
-                  >
-                    Limpiar selección
-                  </button>
-                </div>
+                <button
+                  className="route-calculate-button"
+                  type="button"
+                  disabled={routeLoading || !selectionComplete || !selectedRouteCoordinates}
+                  title={
+                    selectionComplete
+                      ? "Calcular rutas candidatas"
+                      : "Selecciona grupo, sector y zona destino para calcular"
+                  }
+                  onClick={loadSelectedRoute}
+                >
+                  {routeLoading ? "Calculando..." : "Calcular rutas"}
+                </button>
+
+                <button
+                  className="route-clear-button"
+                  type="button"
+                  disabled={routeLoading}
+                  onClick={clearFilters}
+                >
+                  Limpiar filtros
+                </button>
               </div>
         </article>
 

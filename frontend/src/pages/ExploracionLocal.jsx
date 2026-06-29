@@ -2,13 +2,29 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
 import AquaMap from "../components/map/AquaMap";
-import { aquaRutaData } from "../data/aquaRutaData";
+import SearchableCombobox from "../components/forms/SearchableCombobox";
 import { runBacktrackingExploration } from "../services/backtrackingApi";
 import { runDijkstraExploration } from "../services/dijkstraApi";
 import { fetchRouteGeoJson } from "../services/mapApi";
 import { runTspExploration } from "../services/tspApi";
 import { runGraphTraversal } from "../services/traversalApi";
+import {
+  groupToOption,
+  useCurrentSectorization,
+  useOperationalGroups,
+} from "../hooks/useOperationalAlgorithms";
 import { epsCoverageStatus } from "../utils/epsCoverage";
+import {
+  buildDashboardOptions,
+  dashboardFiltersToSearch,
+  emptyDashboardFilters,
+  sanitizeDashboardFilters,
+} from "../utils/dashboardFilters";
+import {
+  buildRouteContextSearch,
+  readRouteContext,
+  writeRouteContext,
+} from "../utils/sharedRouteContext";
 
 const CRITERIA = {
   distancia: {
@@ -91,73 +107,34 @@ function routeCoordinateKey(coordinates) {
     .join("|");
 }
 
-function sectorsForGroup(group, sectorizedZones, districtMap) {
-  if (!group) return [];
-  const sectorizedGroup = sectorizedZones[group.groupId] || null;
-  const criteria = sectorizedGroup?.criterios || {};
-  const criterionKey = criteria[DEFAULT_SECTOR_CRITERION]
-    ? DEFAULT_SECTOR_CRITERION
-    : Object.keys(criteria)[0] || "";
-  const byCount = criteria[criterionKey] || {};
-  const sectorCount = byCount["3"] ? "3" : Object.keys(byCount)[0] || "";
-  const sectors = (byCount[sectorCount] || []).map((sector) => ({
-    ...sector,
-    key: `${criterionKey}:${sectorCount}:${sector.id}`,
-    zones: (sector.zona_ids || [])
-      .map((id) => districtMap.get(id))
-      .filter(Boolean)
-      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-  }));
-  if (sectors.length) return sectors;
-
-  const zones = (group.zoneIds || [])
-    .map((id) => districtMap.get(id))
-    .filter(Boolean)
-    .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  return zones.length
-    ? [
-        {
-          id: `${group.groupId}-sector-unico`,
-          key: `grupo:${group.groupId}:sector-unico`,
-          nombre: "Sector unico",
-          cantidad_zonas: zones.length,
-          zona_ids: zones.map((zone) => zone.id),
-          zones,
-        },
-      ]
-    : [];
-}
-
 export default function ExploracionLocal() {
-  const [searchParams] = useSearchParams();
-  const districts = useMemo(
-    () => (aquaRutaData.districts || []).filter((district) => district.center),
-    []
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialContext = useMemo(() => readRouteContext(searchParams), [searchParams]);
+  const {
+    districts: allDistricts,
+    epsOrigins,
+    groups: groupedZones,
+    loadingGroups,
+  } = useOperationalGroups();
+  const districts = useMemo(() => allDistricts.filter((district) => district.center), [allDistricts]);
   const districtMap = useMemo(
     () => new Map(districts.map((district) => [district.id, district])),
     [districts]
   );
-  const epsOrigins = useMemo(() => aquaRutaData.epsOrigins || [], []);
-  const groupedZones = useMemo(() => aquaRutaData.groupedZones || [], []);
-  const sectorizedZones = useMemo(() => aquaRutaData.sectorizedZones || {}, []);
-  const requestedDistrictId = searchParams.get("distrito") || "";
+  const requestedDistrictId = initialContext.districtId || "";
+  const requestedSectorId = initialContext.sectorId || "";
+  const [filters, setFilters] = useState(() => initialContext.filters || emptyDashboardFilters());
+  const sanitizedFilters = useMemo(
+    () => sanitizeDashboardFilters(districts, groupedZones, filters),
+    [districts, filters, groupedZones]
+  );
+  const options = useMemo(
+    () => buildDashboardOptions(districts, groupedZones, sanitizedFilters),
+    [districts, groupedZones, sanitizedFilters]
+  );
   const groupOptions = useMemo(
-    () =>
-      groupedZones.length
-        ? groupedZones.map((group) => ({
-            groupId: group.id,
-            groupName: group.nombre,
-            zoneIds: group.zona_ids || [],
-            zonesCount: group.cantidad_zonas || group.zona_ids?.length || 0,
-          }))
-        : Object.values(sectorizedZones).map((group) => ({
-            groupId: group.groupId,
-            groupName: group.groupName,
-            zoneIds: [],
-            zonesCount: group.groupZonesCount || 0,
-          })),
-    [groupedZones, sectorizedZones]
+    () => options.grupos.map(groupToOption),
+    [options.grupos]
   );
   const requestedGroup = useMemo(
     () =>
@@ -166,11 +143,13 @@ export default function ExploracionLocal() {
   );
 
   const [selectedGroupId, setSelectedGroupId] = useState(
-    requestedGroup?.groupId || groupOptions[0]?.groupId || ""
+    sanitizedFilters.grupo !== "todos"
+      ? sanitizedFilters.grupo
+      : initialContext.groupId || requestedGroup?.groupId || ""
   );
-  const [selectedSectorKey, setSelectedSectorKey] = useState("");
-  const [criterion, setCriterion] = useState("distancia");
-  const [mapView, setMapView] = useState("network");
+  const [selectedSectorKey, setSelectedSectorKey] = useState(requestedSectorId);
+  const [criterion, setCriterion] = useState(initialContext.criterion || "distancia");
+  const [mapView, setMapView] = useState(initialContext.mode || "network");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [disabledNodeIds, setDisabledNodeIds] = useState(() => new Set());
@@ -210,23 +189,47 @@ export default function ExploracionLocal() {
     return () => window.clearTimeout(timer);
   }, [mapExpanded]);
 
+  useEffect(() => {
+    if (loadingGroups || !groupOptions.length) return;
+    const timer = window.setTimeout(() => {
+      setSelectedGroupId((current) => {
+        if (groupOptions.some((group) => group.groupId === sanitizedFilters.grupo)) return sanitizedFilters.grupo;
+        if (groupOptions.some((group) => group.groupId === initialContext.groupId)) return initialContext.groupId;
+        if (requestedGroup?.groupId) return requestedGroup.groupId;
+        if (groupOptions.some((group) => group.groupId === current)) return current;
+        return "";
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [groupOptions, initialContext.groupId, loadingGroups, requestedGroup?.groupId, sanitizedFilters.grupo]);
+
+  useEffect(() => {
+    if (dashboardFiltersToSearch(sanitizedFilters).toString() === dashboardFiltersToSearch(filters).toString()) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setFilters(sanitizedFilters), 0);
+    return () => window.clearTimeout(timer);
+  }, [filters, sanitizedFilters]);
+
   const selectedGroup =
-    groupOptions.find((group) => group.groupId === selectedGroupId) || groupOptions[0] || null;
-  const sectorOptions = useMemo(() => {
-    return sectorsForGroup(selectedGroup, sectorizedZones, districtMap);
-  }, [districtMap, selectedGroup, sectorizedZones]);
+    groupOptions.find((group) => group.groupId === selectedGroupId) || null;
+  const {
+    sectors: sectorOptions,
+    loadingSectors,
+    sectorizationError,
+  } = useCurrentSectorization(selectedGroup, districtMap, {
+    splitCriterion: DEFAULT_SECTOR_CRITERION,
+  });
   const searchableZones = useMemo(
     () =>
-      groupOptions.flatMap((group) =>
-        sectorsForGroup(group, sectorizedZones, districtMap).flatMap((sector) =>
-          sector.zones.map((zone) => ({
-            ...zone,
-            groupId: group.groupId,
-            sectorKey: sector.key,
-          }))
-        )
+      sectorOptions.flatMap((sector) =>
+        sector.zones.map((zone) => ({
+          ...zone,
+          groupId: selectedGroup?.groupId || "",
+          sectorKey: sector.key,
+        }))
       ),
-    [districtMap, groupOptions, sectorizedZones]
+    [sectorOptions, selectedGroup?.groupId]
   );
   const searchResults = useMemo(() => {
     const term = searchQuery.trim().toLocaleLowerCase("es");
@@ -245,12 +248,15 @@ export default function ExploracionLocal() {
   }, [searchQuery, searchableZones]);
   const selectedSector =
     sectorOptions.find((sector) => sector.key === selectedSectorKey) ||
+    sectorOptions.find((sector) => sector.id === requestedSectorId) ||
     sectorOptions.find((sector) =>
       (sector.zona_ids || []).includes(requestedDistrictId)
     ) ||
-    sectorOptions[0] ||
     null;
-  const sectorDistricts = selectedSector?.zones?.length ? selectedSector.zones : districts;
+  const sectorDistricts = useMemo(
+    () => (selectedSector?.zones?.length ? selectedSector.zones : []),
+    [selectedSector]
+  );
   const selectedSectorCenter = useMemo(() => sectorCenter(sectorDistricts), [sectorDistricts]);
   const selectedOrigin = useMemo(
     () => nearestOriginToPoint(selectedSectorCenter, epsOrigins),
@@ -279,6 +285,22 @@ export default function ExploracionLocal() {
     sectorDistricts.find((node) => node.id === selectedTargetId) ||
     sectorDistricts[sectorDistricts.length - 1] ||
     null;
+
+  useEffect(() => {
+    const context = {
+      filters: sanitizedFilters,
+      groupId: selectedGroupId,
+      sectorId: selectedSector?.id || "",
+      districtId: selectedTarget?.id || requestedDistrictId || "",
+      criterion,
+      mode: mapView,
+    };
+    const nextSearch = buildRouteContextSearch(context);
+    writeRouteContext(context);
+    if (nextSearch.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearch, { replace: true });
+    }
+  }, [criterion, mapView, requestedDistrictId, sanitizedFilters, searchParams, selectedGroupId, selectedSector?.id, selectedTarget?.id, setSearchParams]);
   const selectedTraversalOrigin =
     activeSectorNodes.find((node) => node.id === selectedTraversalOriginId) ||
     activeSectorNodes[0] ||
@@ -830,6 +852,60 @@ export default function ExploracionLocal() {
     }));
   }
 
+  function updateFilter(key, value) {
+    const next = { ...sanitizedFilters, [key]: value };
+    if (key === "eps") next.grupo = "todos";
+    if (key === "departamento") {
+      next.provincia = "todos";
+      next.distrito = "todos";
+      next.grupo = "todos";
+    }
+    if (key === "provincia") {
+      next.distrito = "todos";
+      next.grupo = "todos";
+    }
+    if (key === "distrito") next.grupo = "todos";
+    const sanitized = sanitizeDashboardFilters(districts, groupedZones, next);
+    setFilters(sanitized);
+    if (key === "grupo") {
+      setSelectedGroupId(value === "todos" ? "" : value);
+    } else {
+      setSelectedGroupId("");
+    }
+    setSelectedSectorKey("");
+    setSelectedTargetId("");
+    setSelectedTraversalOriginId("");
+    setDisabledNodeIds(new Set());
+  }
+
+  function clearFilters() {
+    setFilters(emptyDashboardFilters());
+    setSelectedGroupId("");
+    setSelectedSectorKey("");
+    setSelectedTargetId("");
+    setSelectedTraversalOriginId("");
+    setDisabledNodeIds(new Set());
+    setSearchQuery("");
+    setCriterion("distancia");
+    setMapView("network");
+    setRoadRouteGeoJson(null);
+    setRoadRouteKey("");
+    setRoadRouteError("");
+    setRoadRouteLoading(false);
+    setTspStatus("idle");
+    setTspPayload(null);
+    setTspError("");
+    setDijkstraStatus("idle");
+    setDijkstraPayload(null);
+    setDijkstraError("");
+    setTraversalStatus("idle");
+    setTraversalPayload(null);
+    setTraversalError("");
+    setBacktrackingStatus("idle");
+    setBacktrackingPayload(null);
+    setBacktrackingError("");
+  }
+
   function selectSearchResult(zone) {
     setSelectedGroupId(zone.groupId);
     setSelectedSectorKey(zone.sectorKey);
@@ -935,113 +1011,136 @@ export default function ExploracionLocal() {
                   )}
                 </div>
               </label>
-              <label className="control-group">
-                <span className="control-label">Grupo operativo</span>
-                <select
-                  className="control-select"
-                  value={selectedGroup?.groupId || ""}
-                  onChange={(event) => {
-                    setSelectedGroupId(event.target.value);
-                    setSelectedSectorKey("");
-                    setDisabledNodeIds(new Set());
-                  }}
-                >
-                  {groupOptions.map((group) => (
-                    <option key={group.groupId} value={group.groupId}>
-                      {group.groupName}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SearchableCombobox
+                label="EPS"
+                value={sanitizedFilters.eps}
+                allLabel="Todas"
+                options={options.eps.map((eps) => ({ value: eps, label: eps }))}
+                onChange={(value) => updateFilter("eps", value)}
+              />
+              <SearchableCombobox
+                label="Departamento"
+                value={sanitizedFilters.departamento}
+                allLabel="Todos"
+                options={options.departamentos.map((department) => ({ value: department, label: department }))}
+                onChange={(value) => updateFilter("departamento", value)}
+              />
+              <SearchableCombobox
+                label="Provincia"
+                value={sanitizedFilters.provincia}
+                allLabel="Todas"
+                options={options.provincias.map((province) => ({ value: province, label: province }))}
+                onChange={(value) => updateFilter("provincia", value)}
+              />
+              <SearchableCombobox
+                label="Distrito"
+                value={sanitizedFilters.distrito}
+                allLabel="Todos"
+                options={options.distritos.map((district) => ({ value: district.id, label: district.nombre }))}
+                onChange={(value) => updateFilter("distrito", value)}
+              />
+              <SearchableCombobox
+                label="Grupo operativo"
+                value={selectedGroup?.groupId || "todos"}
+                allLabel="Todos"
+                options={groupOptions.map((group) => ({
+                  value: group.groupId,
+                  label: `${group.groupName} (${group.zonesCount} zonas)`,
+                }))}
+                onChange={(value) => updateFilter("grupo", value)}
+                allowClear={false}
+              />
 
-              <label className="control-group">
-                <span className="control-label">Sector a recorrer</span>
-                <select
-                  className="control-select"
-                  value={selectedSector?.key || ""}
-                  onChange={(event) => {
-                    setSelectedSectorKey(event.target.value);
-                    setDisabledNodeIds(new Set());
-                  }}
-                >
-                  {sectorOptions.map((sector) => (
-                    <option key={sector.key} value={sector.key}>
-                      {sector.nombre} - {sector.cantidad_zonas} zonas
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SearchableCombobox
+                label="Sector a recorrer"
+                value={selectedSector?.key || "todos"}
+                allLabel="Sin sector seleccionado"
+                options={sectorOptions.map((sector) => ({
+                  value: sector.key,
+                  label: `${sector.nombre} - ${sector.cantidad_zonas} zonas`,
+                }))}
+                disabled={loadingSectors || !selectedGroup}
+                onChange={(value) => {
+                  setSelectedSectorKey(value === "todos" ? "" : value);
+                  setDisabledNodeIds(new Set());
+                }}
+              />
+
+              {(loadingSectors || sectorizationError) && (
+                <div className={`local-route-status ${sectorizationError ? "error" : "info"}`}>
+                  {sectorizationError || "Generando sectores actuales del grupo..."}
+                </div>
+              )}
+
+              <button
+                className="route-clear-button"
+                type="button"
+                onClick={clearFilters}
+                disabled={loadingGroups}
+              >
+                Limpiar filtros
+              </button>
 
               {/* Zona destino (Show only for Dijkstra) */}
               {mapView === "dijkstra" && (
-                <label className="control-group local-target-control">
-                  <span className="control-label">Zona destino</span>
-                  <select
-                    className="control-select"
-                    value={selectedTarget?.id || ""}
-                    onChange={(event) => setSelectedTargetId(event.target.value)}
-                  >
-                    {sectorDistricts.map((node) => (
-                      <option key={node.id} value={node.id}>
-                        {node.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SearchableCombobox
+                  label="Zona destino"
+                  value={selectedTarget?.id || "todos"}
+                  allLabel="Sin zona seleccionada"
+                  options={sectorDistricts.map((node) => ({
+                    value: node.id,
+                    label: node.nombre,
+                  }))}
+                  onChange={(value) => setSelectedTargetId(value === "todos" ? "" : value)}
+                />
               )}
 
-              <label className="control-group">
-                <span className="control-label">
-                  {mapView === "dijkstra"
-                    ? "Calcular camino por"
-                    : "Priorizar atención por"}
-                </span>
-                <select
-                  className="control-select"
-                  value={criterion}
-                  onChange={(event) => setCriterion(event.target.value)}
-                >
-                  {Object.entries(CRITERIA).map(([id, option]) => (
-                    <option key={id} value={id}>
-                      {mapView === "dijkstra"
-                        ? option.label.charAt(0).toUpperCase() + option.label.slice(1)
-                        : `Ruta por ${option.label}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SearchableCombobox
+                label={mapView === "dijkstra" ? "Calcular camino por" : "Priorizar atención por"}
+                value={criterion}
+                allLabel=""
+                options={Object.entries(CRITERIA).map(([id, option]) => ({
+                  value: id,
+                  label:
+                    mapView === "dijkstra"
+                      ? option.label.charAt(0).toUpperCase() + option.label.slice(1)
+                      : `Ruta por ${option.label}`,
+                }))}
+                onChange={setCriterion}
+                allowClear={false}
+                includeAllOption={false}
+              />
 
               {/* Zona de inicio (Show only for Traversal) */}
               {mapView === "traversal" && (
-                <label className="control-group">
-                  <span className="control-label">Zona de inicio</span>
-                  <select
-                    className="control-select"
-                    value={selectedTraversalOrigin?.id || ""}
-                    onChange={(event) => setSelectedTraversalOriginId(event.target.value)}
-                  >
-                    {activeSectorNodes.map((node) => (
-                      <option key={node.id} value={node.id}>
-                        {node.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SearchableCombobox
+                  label="Zona de inicio"
+                  value={selectedTraversalOrigin?.id || ""}
+                  allLabel="Sin zona de inicio"
+                  options={activeSectorNodes.map((node) => ({
+                    value: node.id,
+                    label: node.nombre,
+                  }))}
+                  onChange={setSelectedTraversalOriginId}
+                  allowClear={false}
+                  includeAllOption={false}
+                />
               )}
 
               {/* Tipo de recorrido (Show only for Traversal) */}
               {mapView === "traversal" && (
-                <label className="control-group">
-                  <span className="control-label">Tipo de recorrido</span>
-                  <select
-                    className="control-select"
-                    value={traversalAlgorithm}
-                    onChange={(event) => setTraversalAlgorithm(event.target.value)}
-                  >
-                    <option value="bfs">Por niveles (BFS)</option>
-                    <option value="dfs">En profundidad (DFS)</option>
-                  </select>
-                </label>
+                <SearchableCombobox
+                  label="Tipo de recorrido"
+                  value={traversalAlgorithm}
+                  allLabel=""
+                  options={[
+                    { value: "bfs", label: "Por niveles (BFS)" },
+                    { value: "dfs", label: "En profundidad (DFS)" },
+                  ]}
+                  onChange={setTraversalAlgorithm}
+                  allowClear={false}
+                  includeAllOption={false}
+                />
               )}
 
               {/* Restricciones operativas (Show only for Backtracking) */}
@@ -1095,12 +1194,6 @@ export default function ExploracionLocal() {
                 </fieldset>
               )}
 
-              {mapView === "network" && tspStatus === "idle" && (
-                <div className="local-route-status info">
-                  Selecciona un sector y un punto de origen.
-                </div>
-              )}
-
               {mapView === "network" && tspStatus === "loading" && (
                 <div className="local-route-status info">
                   Calculando secuencia de visita...
@@ -1117,12 +1210,6 @@ export default function ExploracionLocal() {
                 <div className="local-route-status error">
                   <span>{tspError || "No se pudo calcular la secuencia de visita."}</span>
                   <button type="button" onClick={retryTsp} style={{ marginLeft: '6px', background: 'transparent', textDecoration: 'underline', color: 'inherit', cursor: 'pointer' }}>Reintentar</button>
-                </div>
-              )}
-
-              {mapView === "dijkstra" && dijkstraStatus === "idle" && (
-                <div className="local-route-status info">
-                  Selecciona un origen, un destino y un criterio.
                 </div>
               )}
 

@@ -10,6 +10,7 @@ const mapa = await readFile("src/pages/MapaOperativo.jsx", "utf8");
 const local = await readFile("src/pages/ExploracionLocal.jsx", "utf8");
 const sector = await readFile("src/pages/Sectorizacion.jsx", "utf8");
 const sectorizationApi = await readFile("src/services/sectorizationApi.js", "utf8");
+const operationalHook = await readFile("src/hooks/useOperationalAlgorithms.js", "utf8");
 const searchableCombobox = await readFile("src/components/forms/SearchableCombobox.jsx", "utf8");
 const mapToolbar = await readFile("src/components/map/MapToolbar.jsx", "utf8");
 
@@ -35,31 +36,43 @@ assert.ok(sector.includes("allowClear={false}"), "Sectorizacion no debe permitir
 assert.ok(sector.includes("MapToolbar"), "Sectorizacion debe reutilizar la barra de mapa compartida");
 assert.ok(sector.includes("sector-map-expanded"), "Sectorizacion debe ampliar solo el mapa sin ocultar cabecera ni controles");
 assert.equal(sector.includes("workspace-expanded"), false, "Sectorizacion no debe usar el modo global que oculta bloques superiores");
-assert.ok(sector.includes("DEFAULT_GROUP_ID = \"grupo-1\""), "Sectorizacion debe seleccionar Grupo 1 por defecto");
+assert.equal(
+  sector.includes("groupIds.includes(\"grupo-1\")"),
+  false,
+  "Sectorizacion no debe seleccionar Grupo 1 por defecto cuando la URL llega sin contexto"
+);
 assert.ok(sector.includes("searchParams.get(\"groupId\")"), "Sectorizacion debe aceptar groupId por navegacion");
 assert.ok(
-  sector.includes("consolidateDashboardDistrictsAndGroups"),
-  "Sectorizacion debe usar la misma consolidacion de distritos y grupos que Dashboard"
+  sector.includes("useOperationalGroups") && operationalHook.includes("consolidateDashboardDistrictsAndGroups"),
+  "Sectorizacion debe usar la misma consolidacion compartida de distritos y grupos"
 );
 assert.ok(
-  sector.includes("group.zona_ids?.length ?? group.cantidad_zonas ?? 0"),
+  sector.includes("groupToOption") && operationalHook.includes("group.zona_ids?.length"),
   "Sectorizacion debe filtrar grupos por distritos canonicos reales"
 );
 assert.ok(searchableCombobox.includes("aria-expanded"), "Combobox compartido debe exponer expansion accesible");
 assert.ok(searchableCombobox.includes("role=\"combobox\""), "Combobox compartido debe declarar rol combobox");
 assert.ok(searchableCombobox.includes("role=\"listbox\""), "Combobox compartido debe declarar lista desplegable");
 assert.ok(mapToolbar.includes("aria-expanded"), "Toolbar compartida debe exponer leyenda accesible");
-assert.ok(searchableCombobox.includes("▾"), "Combobox compartido no debe usar una V como icono de apertura");
+assert.ok(searchableCombobox.includes("▾"), "Combobox compartido debe usar un indicador de apertura consistente");
 assert.ok(sector.includes("runSectorization"), "Sectorizacion debe ejecutar el backend al seleccionar grupo");
 assert.ok(sectorizationApi.includes("/sectorization/run"), "El servicio debe apuntar a /sectorization/run");
 assert.equal(sector.includes("sectorizedZones"), false, "Sectorizacion no debe usar sectores precalculados");
+assert.ok(sector.includes("Ver en mapa"), "Sectorizacion debe navegar al mapa con el sector actual");
+assert.ok(sector.includes("Explorar localmente"), "Sectorizacion debe navegar a exploracion local con el sector actual");
+assert.ok(mapa.includes("useOperationalGroups"), "Mapa debe usar grupos UFDS actuales");
+assert.ok(local.includes("useOperationalGroups"), "Exploracion local debe usar grupos UFDS actuales");
+assert.ok(mapa.includes("SearchableCombobox"), "Mapa debe reutilizar filtros buscables compartidos");
+assert.ok(local.includes("SearchableCombobox"), "Exploracion local debe reutilizar filtros buscables compartidos");
+assert.ok(mapa.includes("readRouteContext"), "Mapa debe restaurar contexto compartido");
+assert.ok(local.includes("readRouteContext"), "Exploracion local debe restaurar contexto compartido");
 assert.equal(sector.includes("maxSectorSize"), false, "Sectorizacion no debe mostrar tamano maximo editable");
 assert.equal(sector.includes("splitCriterion"), false, "Sectorizacion no debe mostrar criterio sin efecto visible");
 assert.equal(sector.includes("Ocultar configuracion"), false, "Sectorizacion no debe mantener boton de ocultar configuracion");
 assert.equal(sector.includes("sectores oficiales"), false, "Sectorizacion no debe mencionar sectores oficiales");
 assert.equal(sector.includes("Sector recomendado"), false, "Sectorizacion no debe mostrar sector recomendado");
 assert.equal(
-  sector.includes("El grupo es manejable y se mantiene como un único sector"),
+  sector.includes("El grupo es manejable y se mantiene como un Ãºnico sector"),
   false,
   "Sectorizacion no debe mostrar aviso especial cuando hay un unico sector"
 );
@@ -97,7 +110,7 @@ assert.equal(sector.includes("<Circle\n"), false, "Sectorizacion no debe dibujar
 assert.equal(sector.includes("EPS local"), false, "Sectorizacion no debe mostrar categoria EPS local");
 assert.equal(sector.includes("EPS externa"), false, "Sectorizacion no debe mostrar categoria EPS externa");
 assert.equal(sector.includes("EPS lejana"), false, "Sectorizacion no debe mostrar categoria EPS lejana");
-assert.equal(sector.includes("Validación operativa requerida"), false, "Sectorizacion no debe mostrar validacion EPS sin accion");
+assert.equal(sector.includes("ValidaciÃ³n operativa requerida"), false, "Sectorizacion no debe mostrar validacion EPS sin accion");
 assert.equal(sector.includes("Zonas"), false, "Sectorizacion debe usar Distritos como termino visual");
 assert.ok(
   sector.includes("Afectaciones estimadas acumuladas"),

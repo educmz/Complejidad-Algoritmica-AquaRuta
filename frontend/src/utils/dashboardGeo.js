@@ -193,16 +193,14 @@ export function consolidateDashboardDistrictsAndGroups(districts = [], groups = 
     };
   });
 
-  const assignedDistricts = new Set();
   const consolidatedGroups = groups.map((group) => {
     const canonicalIds = [];
     for (const id of group.zona_ids || []) {
       const canonicalId = oldToCanonicalId.get(id) || id;
-      if (!canonicalId || canonicalIds.includes(canonicalId) || assignedDistricts.has(canonicalId)) {
+      if (!canonicalId || canonicalIds.includes(canonicalId)) {
         continue;
       }
       canonicalIds.push(canonicalId);
-      assignedDistricts.add(canonicalId);
     }
     return {
       ...group,
