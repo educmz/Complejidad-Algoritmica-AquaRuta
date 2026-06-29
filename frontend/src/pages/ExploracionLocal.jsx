@@ -55,7 +55,6 @@ function formatNumber(value, digits = 2) {
     minimumFractionDigits: digits,
   });
 }
-
 function formatWeight(value, criterion) {
   if (!Number.isFinite(value)) return "No disponible";
   if (criterion === "tiempo") return `${formatNumber(value * 60, 1)} min`;
@@ -150,8 +149,6 @@ export default function ExploracionLocal() {
   const [selectedSectorKey, setSelectedSectorKey] = useState(requestedSectorId);
   const [criterion, setCriterion] = useState(initialContext.criterion || "distancia");
   const [mapView, setMapView] = useState(initialContext.mode || "network");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [disabledNodeIds, setDisabledNodeIds] = useState(() => new Set());
   const [roadRouteGeoJson, setRoadRouteGeoJson] = useState(null);
   const [roadRouteKey, setRoadRouteKey] = useState("");
@@ -161,7 +158,7 @@ export default function ExploracionLocal() {
   const [tspError, setTspError] = useState("");
   const [tspPayload, setTspPayload] = useState(null);
   const [tspRetryToken, setTspRetryToken] = useState(0);
-  const [selectedTargetId, setSelectedTargetId] = useState("");
+  const [selectedTargetId, setSelectedTargetId] = useState(requestedDistrictId);
   const [dijkstraStatus, setDijkstraStatus] = useState("idle");
   const [dijkstraError, setDijkstraError] = useState("");
   const [dijkstraPayload, setDijkstraPayload] = useState(null);
@@ -220,39 +217,8 @@ export default function ExploracionLocal() {
   } = useCurrentSectorization(selectedGroup, districtMap, {
     splitCriterion: DEFAULT_SECTOR_CRITERION,
   });
-  const searchableZones = useMemo(
-    () =>
-      sectorOptions.flatMap((sector) =>
-        sector.zones.map((zone) => ({
-          ...zone,
-          groupId: selectedGroup?.groupId || "",
-          sectorKey: sector.key,
-        }))
-      ),
-    [sectorOptions, selectedGroup?.groupId]
-  );
-  const searchResults = useMemo(() => {
-    const term = searchQuery.trim().toLocaleLowerCase("es");
-    if (!term) return [];
-    return searchableZones
-      .filter((zone) =>
-        [zone.nombre, zone.provincia, zone.departamento]
-          .filter(Boolean)
-          .some((value) => String(value).toLocaleLowerCase("es").includes(term))
-      )
-      .filter(
-        (zone, index, items) =>
-          items.findIndex((item) => item.id === zone.id) === index
-      )
-      .slice(0, 8);
-  }, [searchQuery, searchableZones]);
   const selectedSector =
-    sectorOptions.find((sector) => sector.key === selectedSectorKey) ||
-    sectorOptions.find((sector) => sector.id === requestedSectorId) ||
-    sectorOptions.find((sector) =>
-      (sector.zona_ids || []).includes(requestedDistrictId)
-    ) ||
-    null;
+    sectorOptions.find((sector) => sector.key === selectedSectorKey) || null;
   const sectorDistricts = useMemo(
     () => (selectedSector?.zones?.length ? selectedSector.zones : []),
     [selectedSector]
@@ -282,16 +248,14 @@ export default function ExploracionLocal() {
     [disabledNodeIds, sectorDistricts]
   );
   const selectedTarget =
-    sectorDistricts.find((node) => node.id === selectedTargetId) ||
-    sectorDistricts[sectorDistricts.length - 1] ||
-    null;
+    sectorDistricts.find((node) => node.id === selectedTargetId) || null;
 
   useEffect(() => {
     const context = {
       filters: sanitizedFilters,
       groupId: selectedGroupId,
       sectorId: selectedSector?.id || "",
-      districtId: selectedTarget?.id || requestedDistrictId || "",
+      districtId: selectedTarget?.id || "",
       criterion,
       mode: mapView,
     };
@@ -300,7 +264,7 @@ export default function ExploracionLocal() {
     if (nextSearch.toString() !== searchParams.toString()) {
       setSearchParams(nextSearch, { replace: true });
     }
-  }, [criterion, mapView, requestedDistrictId, sanitizedFilters, searchParams, selectedGroupId, selectedSector?.id, selectedTarget?.id, setSearchParams]);
+  }, [criterion, mapView, sanitizedFilters, searchParams, selectedGroupId, selectedSector?.id, selectedTarget?.id, setSearchParams]);
   const selectedTraversalOrigin =
     activeSectorNodes.find((node) => node.id === selectedTraversalOriginId) ||
     activeSectorNodes[0] ||
@@ -576,16 +540,6 @@ export default function ExploracionLocal() {
     }),
     [activeSectorNodes, backtrackingConstraints, criterion, selectedOrigin?.id]
   );
-
-  useEffect(() => {
-    if (selectedTargetId && sectorDistricts.some((node) => node.id === selectedTargetId)) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setSelectedTargetId(sectorDistricts[sectorDistricts.length - 1]?.id || "");
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [sectorDistricts, selectedTargetId]);
 
   useEffect(() => {
     if (
@@ -885,7 +839,6 @@ export default function ExploracionLocal() {
     setSelectedTargetId("");
     setSelectedTraversalOriginId("");
     setDisabledNodeIds(new Set());
-    setSearchQuery("");
     setCriterion("distancia");
     setMapView("network");
     setRoadRouteGeoJson(null);
@@ -904,15 +857,6 @@ export default function ExploracionLocal() {
     setBacktrackingStatus("idle");
     setBacktrackingPayload(null);
     setBacktrackingError("");
-  }
-
-  function selectSearchResult(zone) {
-    setSelectedGroupId(zone.groupId);
-    setSelectedSectorKey(zone.sectorKey);
-    setSelectedTargetId(zone.id);
-    setDisabledNodeIds(new Set());
-    setSearchQuery(zone.nombre);
-    setSearchOpen(false);
   }
 
   return (
@@ -953,92 +897,6 @@ export default function ExploracionLocal() {
             <h3 className="panel-title">Controles locales</h3>
 
             <div className={`local-control-stack local-controls-${mapView === "dijkstra" ? "five" : "four"}`}>
-              <label className="control-group local-search-control">
-                <span className="control-label">Búsqueda</span>
-                <div className="local-search-box">
-                  <input
-                    className="control-input"
-                    type="search"
-                    value={searchQuery}
-                    placeholder="Buscar zona, distrito, provincia o departamento"
-                    autoComplete="off"
-                    onFocus={() => setSearchOpen(true)}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setSearchQuery(value);
-                      setSearchOpen(true);
-                      const exactMatches = searchableZones.filter(
-                        (zone) =>
-                          zone.nombre.localeCompare(value.trim(), "es", {
-                            sensitivity: "base",
-                          }) === 0
-                      );
-                      if (exactMatches.length === 1) {
-                        selectSearchResult(exactMatches[0]);
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && searchResults[0]) {
-                        event.preventDefault();
-                        selectSearchResult(searchResults[0]);
-                      }
-                      if (event.key === "Escape") setSearchOpen(false);
-                    }}
-                    onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
-                  />
-                  {searchOpen && searchQuery.trim() && (
-                    <div className="local-search-results">
-                      {searchResults.length ? (
-                        searchResults.map((zone) => (
-                          <button
-                            key={zone.id}
-                            type="button"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => selectSearchResult(zone)}
-                          >
-                            <strong>{zone.nombre}</strong>
-                            <span>
-                              {[zone.provincia, zone.departamento]
-                                .filter(Boolean)
-                                .join(" - ")}
-                            </span>
-                          </button>
-                        ))
-                      ) : (
-                        <small>Sin coincidencias</small>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </label>
-              <SearchableCombobox
-                label="EPS"
-                value={sanitizedFilters.eps}
-                allLabel="Todas"
-                options={options.eps.map((eps) => ({ value: eps, label: eps }))}
-                onChange={(value) => updateFilter("eps", value)}
-              />
-              <SearchableCombobox
-                label="Departamento"
-                value={sanitizedFilters.departamento}
-                allLabel="Todos"
-                options={options.departamentos.map((department) => ({ value: department, label: department }))}
-                onChange={(value) => updateFilter("departamento", value)}
-              />
-              <SearchableCombobox
-                label="Provincia"
-                value={sanitizedFilters.provincia}
-                allLabel="Todas"
-                options={options.provincias.map((province) => ({ value: province, label: province }))}
-                onChange={(value) => updateFilter("provincia", value)}
-              />
-              <SearchableCombobox
-                label="Distrito"
-                value={sanitizedFilters.distrito}
-                allLabel="Todos"
-                options={options.distritos.map((district) => ({ value: district.id, label: district.nombre }))}
-                onChange={(value) => updateFilter("distrito", value)}
-              />
               <SearchableCombobox
                 label="Grupo operativo"
                 value={selectedGroup?.groupId || "todos"}
@@ -1053,7 +911,7 @@ export default function ExploracionLocal() {
 
               <SearchableCombobox
                 label="Sector a recorrer"
-                value={selectedSector?.key || "todos"}
+                value={selectedSectorKey || "todos"}
                 allLabel="Sin sector seleccionado"
                 options={sectorOptions.map((sector) => ({
                   value: sector.key,
@@ -1072,20 +930,11 @@ export default function ExploracionLocal() {
                 </div>
               )}
 
-              <button
-                className="route-clear-button"
-                type="button"
-                onClick={clearFilters}
-                disabled={loadingGroups}
-              >
-                Limpiar filtros
-              </button>
-
               {/* Zona destino (Show only for Dijkstra) */}
               {mapView === "dijkstra" && (
                 <SearchableCombobox
                   label="Zona destino"
-                  value={selectedTarget?.id || "todos"}
+                  value={selectedTargetId || "todos"}
                   allLabel="Sin zona seleccionada"
                   options={sectorDistricts.map((node) => ({
                     value: node.id,
@@ -1110,6 +959,15 @@ export default function ExploracionLocal() {
                 allowClear={false}
                 includeAllOption={false}
               />
+
+              <button
+                className="route-clear-button"
+                type="button"
+                onClick={clearFilters}
+                disabled={loadingGroups}
+              >
+                Limpiar filtros
+              </button>
 
               {/* Zona de inicio (Show only for Traversal) */}
               {mapView === "traversal" && (
@@ -1517,10 +1375,10 @@ export default function ExploracionLocal() {
                 <strong>Recorrido propuesto</strong>
                 <p>
                   {traversalPayload.unreachableNodes?.length
-                    ? `Se visitaron ${traversalPayload.summary.visitedNodes} de ${traversalPayload.summary.totalNodes} zona(s) mediante búsqueda en grafo.`
+                    ? `Se visitaron ${traversalPayload.summary.visitedNodes} de ${traversalPayload.summary.totalNodes} zona(s) mediante recorrido en grafo.`
                     : `Se visitaron todas las ${traversalPayload.summary.visitedNodes} zona(s) desde ${traversalPayload.origin.name}.`}
                 </p>
-                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Búsqueda: {traversalAlgorithm === "bfs" ? "Por niveles (BFS)" : "En profundidad (DFS)"}</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Recorrido: {traversalAlgorithm === "bfs" ? "Por niveles (BFS)" : "En profundidad (DFS)"}</span>
               </div>
             )}
 

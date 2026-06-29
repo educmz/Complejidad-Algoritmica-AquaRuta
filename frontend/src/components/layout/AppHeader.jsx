@@ -1,5 +1,5 @@
-import { useEffect, useId, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import logo from "../../assets/logo.png";
 
 const navItems = [
@@ -12,7 +12,11 @@ const navItems = [
 
 export default function AppHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navIndicator, setNavIndicator] = useState({ left: 0, visible: false });
+  const location = useLocation();
   const menuId = useId();
+  const navRef = useRef(null);
+  const linkRefs = useRef({});
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -29,17 +33,57 @@ export default function AppHeader() {
     setMenuOpen(false);
   }
 
+  useLayoutEffect(() => {
+    function findActivePath() {
+      return (
+        navItems.find((item) =>
+          item.path === "/dashboard"
+            ? location.pathname === item.path || location.pathname === "/"
+            : location.pathname.startsWith(item.path)
+        )?.path || "/dashboard"
+      );
+    }
+
+    function updateIndicator() {
+      const navElement = navRef.current;
+      const activeLink = linkRefs.current[findActivePath()];
+      if (!navElement || !activeLink) {
+        setNavIndicator((current) => ({ ...current, visible: false }));
+        return;
+      }
+
+      const navRect = navElement.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+      setNavIndicator({
+        left: linkRect.left - navRect.left + linkRect.width / 2,
+        visible: true,
+      });
+    }
+
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [location.pathname]);
+
   return (
     <header className="app-header">
       <a className="app-header-brand" href="/dashboard" aria-label="AquaRuta dashboard">
         <img src={logo} alt="" />
       </a>
 
-      <nav className="app-header-nav" aria-label="Navegacion principal">
+      <nav className="app-header-nav" aria-label="Navegacion principal" ref={navRef}>
+        <span
+          className={`app-nav-orb ${navIndicator.visible ? "visible" : ""}`}
+          style={{ left: `${navIndicator.left}px` }}
+          aria-hidden="true"
+        />
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
+            ref={(element) => {
+              linkRefs.current[item.path] = element;
+            }}
             className={({ isActive }) => (isActive ? "app-nav-link active" : "app-nav-link")}
             aria-label={item.label}
           >

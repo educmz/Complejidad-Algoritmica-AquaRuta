@@ -611,11 +611,11 @@ export default function MapaOperativo() {
       : requestedGroup?.groupId || ""
   );
   const [selectedSectorKey, setSelectedSectorKey] = useState(requestedSectorId);
-  const [selectedDistrictId, setSelectedDistrictId] = useState("");
   const initialDestinationId =
     validDistricts.some((district) => district.id === requestedDestinationId)
       ? requestedDestinationId
       : "";
+  const [selectedDistrictId, setSelectedDistrictId] = useState(initialDestinationId);
   const [criterion, setCriterion] = useState(
     ["distancia", "tiempo", "costo"].includes(requestedCriterion)
       ? requestedCriterion
@@ -666,15 +666,10 @@ export default function MapaOperativo() {
     splitCriterion: DEFAULT_SECTOR_CRITERION,
   });
   const selectedSector =
-    sectorOptions.find((sector) => sector.key === selectedSectorKey) ||
-    sectorOptions.find((sector) => sector.id === requestedSectorId) ||
-    sectorOptions.find((sector) => (sector.zona_ids || []).includes(selectedDistrictId || initialDestinationId)) ||
-    null;
+    sectorOptions.find((sector) => sector.key === selectedSectorKey) || null;
   const districtOptions = useMemo(() => selectedSector?.zones || [], [selectedSector]);
   const selectedDistrict =
-    districtOptions.find((district) => district.id === selectedDistrictId) ||
-    districtOptions.find((district) => district.id === initialDestinationId) ||
-    null;
+    districtOptions.find((district) => district.id === selectedDistrictId) || null;
   const selectedDestination = selectedDistrict;
   const selectedOrigin = selectedDestination
     ? [...epsOrigins]
@@ -1003,34 +998,6 @@ export default function MapaOperativo() {
               <h3 className="panel-title">Controles</h3>
               <div className="route-control-stack">
                 <SearchableCombobox
-                  label="EPS"
-                  value={sanitizedFilters.eps}
-                  allLabel="Todas"
-                  options={options.eps.map((eps) => ({ value: eps, label: eps }))}
-                  onChange={(value) => updateFilter("eps", value)}
-                />
-                <SearchableCombobox
-                  label="Departamento"
-                  value={sanitizedFilters.departamento}
-                  allLabel="Todos"
-                  options={options.departamentos.map((department) => ({ value: department, label: department }))}
-                  onChange={(value) => updateFilter("departamento", value)}
-                />
-                <SearchableCombobox
-                  label="Provincia"
-                  value={sanitizedFilters.provincia}
-                  allLabel="Todas"
-                  options={options.provincias.map((province) => ({ value: province, label: province }))}
-                  onChange={(value) => updateFilter("provincia", value)}
-                />
-                <SearchableCombobox
-                  label="Distrito"
-                  value={sanitizedFilters.distrito}
-                  allLabel="Todos"
-                  options={options.distritos.map((district) => ({ value: district.id, label: district.nombre }))}
-                  onChange={(value) => updateFilter("distrito", value)}
-                />
-                <SearchableCombobox
                   label="Grupo operativo"
                   value={selectedGroupId || "todos"}
                   allLabel="Todos"
@@ -1044,7 +1011,7 @@ export default function MapaOperativo() {
 
                 <SearchableCombobox
                   label="Sector de atención"
-                  value={selectedSector?.key || "todos"}
+                  value={selectedSectorKey || "todos"}
                   allLabel="Sin sector seleccionado"
                   options={sectorOptions.map((sector) => ({
                     value: sector.key,
@@ -1066,7 +1033,7 @@ export default function MapaOperativo() {
 
                 <SearchableCombobox
                   label="Zona destino"
-                  value={selectedDistrict?.id || "todos"}
+                  value={selectedDistrictId || "todos"}
                   allLabel="Sin zona seleccionada"
                   options={districtOptions.map((district) => ({
                     value: district.id,
