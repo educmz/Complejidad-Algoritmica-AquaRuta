@@ -840,7 +840,6 @@ export default function ExploracionLocal() {
     setSelectedTraversalOriginId("");
     setDisabledNodeIds(new Set());
     setCriterion("distancia");
-    setMapView("network");
     setRoadRouteGeoJson(null);
     setRoadRouteKey("");
     setRoadRouteError("");
