@@ -202,9 +202,9 @@ export default function AquaMap({
   showConceptRouteFallback = true,
   graphEdges = [],
   highlightedPathEdges = [],
+  highlightedEdgeColor = "#16a34a",
   showEdgeWeights = false,
-  showHighlightedEdgeLabels = false,
-  edgeWeightLabel = "Peso",
+  edgeMetricLabel = "Peso",
   showDistrictMarkers = true,
   onDistrictClick,
   height = 520,
@@ -214,6 +214,8 @@ export default function AquaMap({
   viewportLayoutKey = "",
 }) {
   const [centerRequestKey, setCenterRequestKey] = useState(0);
+  const [hoveredEdgeKey, setHoveredEdgeKey] = useState("");
+  const [selectedEdgeKey, setSelectedEdgeKey] = useState("");
   const districtMap = useMemo(
     () => new Map(districtPoints.map((district) => [district.id, district])),
     [districtPoints]
@@ -326,38 +328,62 @@ export default function AquaMap({
             if (!source?.center || !target?.center) return null;
 
             const isHighlighted = highlightedSet.has(edgeKey(edge.source, edge.target));
+            const currentEdgeKey = edgeKey(edge.source, edge.target);
+            const isInteractiveEdge = isHighlighted && Boolean(edge.weightLabel);
+            const isFocused =
+              currentEdgeKey === hoveredEdgeKey || currentEdgeKey === selectedEdgeKey;
+            const sourceOrder = source.mapOrder || (source.isEpsNode ? "EPS" : source.nombre);
+            const targetOrder = target.mapOrder || (target.isEpsNode ? "EPS" : target.nombre);
 
             return (
               <Polyline
                 key={`${edge.source}-${edge.target}`}
                 positions={[source.center, target.center]}
                 pathOptions={{
-                  color: isHighlighted ? "#16a34a" : "#64748b",
-                  weight: isHighlighted ? 5 : 2.5,
+                  color: isHighlighted ? highlightedEdgeColor : "#64748b",
+                  weight: isFocused ? 7 : isHighlighted ? 5 : 2.5,
                   opacity: isHighlighted ? 1 : 0.75,
                 }}
+                eventHandlers={
+                  isInteractiveEdge
+                    ? {
+                        mouseover: () => setHoveredEdgeKey(currentEdgeKey),
+                        mouseout: () => setHoveredEdgeKey(""),
+                        click: () =>
+                          setSelectedEdgeKey((current) =>
+                            current === currentEdgeKey ? "" : currentEdgeKey
+                          ),
+                      }
+                    : undefined
+                }
               >
                 {showEdgeWeights && (
                   <Tooltip permanent direction="center" opacity={0.9}>
                     {edge.weightLabel || edge.weight}
                   </Tooltip>
                 )}
-                {showHighlightedEdgeLabels && isHighlighted && edge.weightLabel && (
+                {isInteractiveEdge && (
                   <Tooltip
-                    permanent
-                    direction="center"
+                    permanent={
+                      selectedEdgeKey === currentEdgeKey
+                    }
+                    direction="auto"
                     offset={[0, -5]}
                     opacity={0.96}
+                    sticky
                     interactive={false}
                     className="sequence-edge-weight-tooltip"
                   >
-                    {edge.weightLabel}
+                    <span className="sequence-edge-tooltip-title">
+                      Tramo {sourceOrder} → {targetOrder}
+                    </span>
+                    <span>{edgeMetricLabel}: {edge.weightLabel}</span>
                   </Tooltip>
                 )}
                 <Popup>
-                  Conexion: {source.nombre} - {target.nombre}
+                  <strong>Tramo {sourceOrder} → {targetOrder}</strong>
                   <br />
-                  {edgeWeightLabel}: {edge.weightLabel || edge.weight}
+                  {edgeMetricLabel}: {edge.weightLabel || edge.weight}
                 </Popup>
               </Polyline>
             );

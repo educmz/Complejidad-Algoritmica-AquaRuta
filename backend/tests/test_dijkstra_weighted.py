@@ -146,7 +146,7 @@ class DijkstraServiceTests(unittest.TestCase):
         self.assertGreater(result["summary"]["totalDurationMin"], 0)
         self.assertGreater(result["summary"]["relaxedEdges"], 0)
 
-    def test_service_reports_unreachable(self):
+    def test_service_connects_valid_coordinate_nodes_when_knn_is_fragmented(self):
         result = self.service().run(
             "eps-1",
             "B",
@@ -155,7 +155,9 @@ class DijkstraServiceTests(unittest.TestCase):
             max_neighbors=1,
         )
 
-        self.assertIn(result["status"], {"success", "unreachable"})
+        self.assertEqual(result["status"], "success")
+        self.assertGreater(len(result["path"]), 1)
+        self.assertGreater(result["summary"]["totalWeight"], 0)
 
     def test_service_rejects_invalid_inputs(self):
         service = self.service()

@@ -307,6 +307,34 @@ export default function ExploracionLocal() {
     }),
     [criterion, tspPayload]
   );
+  const attentionSegments = useMemo(() => {
+    const sequenceOrder = new Map(
+      sequenceNodes.map((node, index) => [node.id, node.mapOrder || index + 1])
+    );
+    const seen = new Set();
+
+    return sequenceEdges
+      .filter((edge) => edge.weightLabel)
+      .map((edge) => {
+        const key = `${edge.source}->${edge.target}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+
+        return {
+          key,
+          from:
+            edge.source === selectedOrigin?.id
+              ? "EPS"
+              : sequenceOrder.get(edge.source) || districtMap.get(edge.source)?.nombre,
+          to:
+            edge.target === selectedOrigin?.id
+              ? "EPS"
+              : sequenceOrder.get(edge.target) || districtMap.get(edge.target)?.nombre,
+          weight: edge.weightLabel,
+        };
+      })
+      .filter((segment) => segment?.from && segment?.to);
+  }, [districtMap, selectedOrigin?.id, sequenceEdges, sequenceNodes]);
   const dijkstraEdges = useMemo(
     () => (dijkstraPayload?.edges || []).map((edge) => ({
       source: edge.source,
@@ -317,6 +345,23 @@ export default function ExploracionLocal() {
     })),
     [criterion, dijkstraPayload]
   );
+  const dijkstraSegments = useMemo(() => {
+    const seen = new Set();
+    return dijkstraEdges
+      .filter((edge) => edge.weightLabel)
+      .map((edge, index) => {
+        const key = `${edge.source}->${edge.target}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+        return {
+          key,
+          from: index + 1,
+          to: index + 2,
+          weight: edge.weightLabel,
+        };
+      })
+      .filter(Boolean);
+  }, [dijkstraEdges]);
   const dijkstraPathIds = useMemo(
     () => new Set((dijkstraPayload?.path || []).map((item) => item.nodeId)),
     [dijkstraPayload]
@@ -434,6 +479,8 @@ export default function ExploracionLocal() {
       : criterion === "costo"
       ? "Costo estimado"
       : "Distancia estimada";
+  const displayedAttentionSegments =
+    mapView === "dijkstra" ? dijkstraSegments : attentionSegments;
   const roadRouteCoordinates = useMemo(
     () =>
       routePoints.length > 1
@@ -992,7 +1039,7 @@ export default function ExploracionLocal() {
 
               {mapView === "dijkstra" && dijkstraStatus === "unreachable" && (
                 <div className="local-route-status warning">
-                  No existe una conexión disponible entre los nodos seleccionados.
+                  No se pudo calcular el camino porque faltan coordenadas válidas.
                 </div>
               )}
 
@@ -1099,10 +1146,20 @@ export default function ExploracionLocal() {
               routeColor={mapView === "dijkstra" ? "#2563eb" : mapView === "traversal" ? "#9333ea" : mapView === "backtracking" ? "#b45309" : "#16a34a"}
               showConceptRouteFallback={mapView !== "road"}
               graphEdges={visibleEdges}
-              highlightedPathEdges={mapView === "network" || mapView === "traversal" || mapView === "backtracking" ? highlightedPathEdges : []}
+              highlightedPathEdges={
+                mapView === "network" || mapView === "dijkstra"
+                  ? highlightedPathEdges
+                  : []
+              }
+              highlightedEdgeColor={mapView === "dijkstra" ? "#2563eb" : "#16a34a"}
               showEdgeWeights={false}
-              showHighlightedEdgeLabels={mapView === "network"}
-              edgeWeightLabel={criterionInfo.edgeLabel}
+              edgeMetricLabel={
+                criterion === "tiempo"
+                  ? "Tiempo"
+                  : criterion === "costo"
+                  ? "Costo"
+                  : "Distancia"
+              }
               showDistrictMarkers
               onDistrictClick={toggleNode}
               height={760}
@@ -1197,13 +1254,7 @@ export default function ExploracionLocal() {
                   )}
                   {mapView === "dijkstra" && showDijkstraNoConnection && (
                     <div className="local-no-connection">
-                      <strong>No se encontró camino operativo para esta zona.</strong>
-                      <span>
-                        La zona tiene coordenadas, pero no está conectada con la EPS dentro de la
-                        red operativa actual. Prueba otra zona del sector o revisa la conectividad
-                        del grupo.
-                      </span>
-                      <small>Zona destino: {selectedTarget?.nombre || "No disponible"}</small>
+                      <strong>No se pudo calcular el camino porque faltan coordenadas válidas.</strong>
                     </div>
                   )}
                   {/* Recorrido por niveles (Traversal) */}
@@ -1243,6 +1294,21 @@ export default function ExploracionLocal() {
                 </div>
               </section>
             </div>
+
+            {(mapView === "network" || mapView === "dijkstra") &&
+              displayedAttentionSegments.length > 0 && (
+              <section className="local-segments-card">
+                <strong>Tramos de atención</strong>
+                <div className="local-segments-list">
+                  {displayedAttentionSegments.map((segment) => (
+                    <div className="local-segment-row" key={segment.key}>
+                      <span>{segment.from} → {segment.to}</span>
+                      <strong>{segment.weight}</strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <div className="local-eps-card">
               <strong>EPS de referencia</strong>

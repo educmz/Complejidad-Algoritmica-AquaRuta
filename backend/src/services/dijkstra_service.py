@@ -136,7 +136,73 @@ class DijkstraService:
             adjacency[source["id"]] = candidates[:max_neighbors]
         return adjacency
 
-    def _path_edges(self, path: list[str], adjacency: dict[str, list[dict[str, Any]]], weight_field: str):
+    @staticmethod
+    def _edge(source: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+        metrics = build_edge_metrics(source, target)
+        return {
+            "to": target["id"],
+            "metrics": metrics,
+            **metrics,
+            "weight": metrics["distance_weight"],
+        }
+
+    def _build_connected_adjacency(
+        self,
+        origin: dict[str, Any],
+        nodes: list[dict[str, Any]],
+        adjacency: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        graph_nodes = [origin] + nodes
+        node_lookup = {node["id"]: node for node in graph_nodes}
+        connected = {
+            node_id: [dict(edge) for edge in neighbors]
+            for node_id, neighbors in adjacency.items()
+        }
+
+        def add_edge(source_id: str, target_id: str) -> None:
+            if any(edge["to"] == target_id for edge in connected[source_id]):
+                return
+            connected[source_id].append(
+                self._edge(node_lookup[source_id], node_lookup[target_id])
+            )
+
+        for source_id, neighbors in adjacency.items():
+            for edge in neighbors:
+                add_edge(edge["to"], source_id)
+
+        reached = {origin["id"]}
+        while True:
+            frontier = list(reached)
+            for source_id in frontier:
+                reached.update(edge["to"] for edge in connected[source_id])
+            if len(reached) == len(graph_nodes):
+                break
+
+            outside = set(node_lookup) - reached
+            source_id, target_id = min(
+                (
+                    (inside_id, outside_id)
+                    for inside_id in reached
+                    for outside_id in outside
+                ),
+                key=lambda pair: haversine_km(
+                    node_lookup[pair[0]]["center"],
+                    node_lookup[pair[1]]["center"],
+                ),
+            )
+            add_edge(source_id, target_id)
+            add_edge(target_id, source_id)
+            reached.add(target_id)
+
+        return connected
+
+    def _path_edges(
+        self,
+        path: list[str],
+        adjacency: dict[str, list[dict[str, Any]]],
+        weight_field: str,
+        edge_type: str = "logical",
+    ):
         edge_map = {
             (source, edge["to"]): edge
             for source, neighbors in adjacency.items()
@@ -158,7 +224,7 @@ class DijkstraService:
                     "operationalCost": edge["operational_cost"],
                     "trafficFactor": edge["traffic_factor"],
                     "isShortestPath": True,
-                    "edge_type": "logical",
+                    "edge_type": edge_type,
                 }
             )
         return edges
@@ -193,6 +259,16 @@ class DijkstraService:
 
         adjacency = self._build_adjacency(origin, nodes, max_neighbors)
         shortest = dijkstra(adjacency, origin["id"], target["id"], weight_field=weight_field)
+        graph_mode = "local"
+        if not shortest.get("reachable"):
+            adjacency = self._build_connected_adjacency(origin, nodes, adjacency)
+            shortest = dijkstra(
+                adjacency,
+                origin["id"],
+                target["id"],
+                weight_field=weight_field,
+            )
+            graph_mode = "estimated-connected"
         elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
 
         if not shortest.get("reachable"):
@@ -224,6 +300,7 @@ class DijkstraService:
                     "algorithm": "dijkstra",
                     "implementation": "python",
                     "weightField": weight_field,
+                    "graphMode": graph_mode,
                     "generatedAt": datetime.now().replace(microsecond=0).isoformat(),
                     "executionMs": elapsed_ms,
                 },
@@ -239,7 +316,12 @@ class DijkstraService:
             }
             for index, node_id in enumerate(shortest["path"])
         ]
-        edges = self._path_edges(shortest["path"], adjacency, weight_field)
+        edges = self._path_edges(
+            shortest["path"],
+            adjacency,
+            weight_field,
+            edge_type="estimated" if graph_mode == "estimated-connected" else "logical",
+        )
         summary = {
             "totalWeight": shortest.get("cost", 0.0),
             "totalDistanceKm": round(sum(edge["distanceKm"] for edge in edges), 6),
@@ -271,6 +353,7 @@ class DijkstraService:
                 "algorithm": "dijkstra",
                 "implementation": "python",
                 "weightField": weight_field,
+                "graphMode": graph_mode,
                 "generatedAt": datetime.now().replace(microsecond=0).isoformat(),
                 "executionMs": elapsed_ms,
             },
