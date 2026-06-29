@@ -91,6 +91,43 @@ function routeCoordinateKey(coordinates) {
     .join("|");
 }
 
+function sectorsForGroup(group, sectorizedZones, districtMap) {
+  if (!group) return [];
+  const sectorizedGroup = sectorizedZones[group.groupId] || null;
+  const criteria = sectorizedGroup?.criterios || {};
+  const criterionKey = criteria[DEFAULT_SECTOR_CRITERION]
+    ? DEFAULT_SECTOR_CRITERION
+    : Object.keys(criteria)[0] || "";
+  const byCount = criteria[criterionKey] || {};
+  const sectorCount = byCount["3"] ? "3" : Object.keys(byCount)[0] || "";
+  const sectors = (byCount[sectorCount] || []).map((sector) => ({
+    ...sector,
+    key: `${criterionKey}:${sectorCount}:${sector.id}`,
+    zones: (sector.zona_ids || [])
+      .map((id) => districtMap.get(id))
+      .filter(Boolean)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+  }));
+  if (sectors.length) return sectors;
+
+  const zones = (group.zoneIds || [])
+    .map((id) => districtMap.get(id))
+    .filter(Boolean)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  return zones.length
+    ? [
+        {
+          id: `${group.groupId}-sector-unico`,
+          key: `grupo:${group.groupId}:sector-unico`,
+          nombre: "Sector unico",
+          cantidad_zonas: zones.length,
+          zona_ids: zones.map((zone) => zone.id),
+          zones,
+        },
+      ]
+    : [];
+}
+
 export default function ExploracionLocal() {
   const [searchParams] = useSearchParams();
   const districts = useMemo(
@@ -134,6 +171,8 @@ export default function ExploracionLocal() {
   const [selectedSectorKey, setSelectedSectorKey] = useState("");
   const [criterion, setCriterion] = useState("distancia");
   const [mapView, setMapView] = useState("network");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [disabledNodeIds, setDisabledNodeIds] = useState(() => new Set());
   const [roadRouteGeoJson, setRoadRouteGeoJson] = useState(null);
   const [roadRouteKey, setRoadRouteKey] = useState("");
@@ -173,42 +212,37 @@ export default function ExploracionLocal() {
 
   const selectedGroup =
     groupOptions.find((group) => group.groupId === selectedGroupId) || groupOptions[0] || null;
-  const selectedSectorizedGroup = selectedGroup?.groupId
-    ? sectorizedZones[selectedGroup.groupId] || null
-    : null;
   const sectorOptions = useMemo(() => {
-    const criteria = selectedSectorizedGroup?.criterios || {};
-    const criterionKey = criteria[DEFAULT_SECTOR_CRITERION]
-      ? DEFAULT_SECTOR_CRITERION
-      : Object.keys(criteria)[0] || "";
-    const byCount = criteria[criterionKey] || {};
-    const sectorCount = byCount["3"] ? "3" : Object.keys(byCount)[0] || "";
-    const sectors = (byCount[sectorCount] || []).map((sector) => ({
-      ...sector,
-      key: `${criterionKey}:${sectorCount}:${sector.id}`,
-      zones: (sector.zona_ids || [])
-        .map((id) => districtMap.get(id))
-        .filter(Boolean)
-        .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    }));
-    if (sectors.length || !selectedGroup) return sectors;
-    const zones = (selectedGroup.zoneIds || [])
-      .map((id) => districtMap.get(id))
-      .filter(Boolean)
-      .sort((a, b) => a.nombre.localeCompare(b.nombre));
-    return zones.length
-      ? [
-          {
-            id: `${selectedGroup.groupId}-sector-unico`,
-            key: `grupo:${selectedGroup.groupId}:sector-unico`,
-            nombre: "Sector unico",
-            cantidad_zonas: zones.length,
-            zona_ids: zones.map((zone) => zone.id),
-            zones,
-          },
-        ]
-      : [];
-  }, [districtMap, selectedGroup, selectedSectorizedGroup]);
+    return sectorsForGroup(selectedGroup, sectorizedZones, districtMap);
+  }, [districtMap, selectedGroup, sectorizedZones]);
+  const searchableZones = useMemo(
+    () =>
+      groupOptions.flatMap((group) =>
+        sectorsForGroup(group, sectorizedZones, districtMap).flatMap((sector) =>
+          sector.zones.map((zone) => ({
+            ...zone,
+            groupId: group.groupId,
+            sectorKey: sector.key,
+          }))
+        )
+      ),
+    [districtMap, groupOptions, sectorizedZones]
+  );
+  const searchResults = useMemo(() => {
+    const term = searchQuery.trim().toLocaleLowerCase("es");
+    if (!term) return [];
+    return searchableZones
+      .filter((zone) =>
+        [zone.nombre, zone.provincia, zone.departamento]
+          .filter(Boolean)
+          .some((value) => String(value).toLocaleLowerCase("es").includes(term))
+      )
+      .filter(
+        (zone, index, items) =>
+          items.findIndex((item) => item.id === zone.id) === index
+      )
+      .slice(0, 8);
+  }, [searchQuery, searchableZones]);
   const selectedSector =
     sectorOptions.find((sector) => sector.key === selectedSectorKey) ||
     sectorOptions.find((sector) =>
@@ -796,6 +830,15 @@ export default function ExploracionLocal() {
     }));
   }
 
+  function selectSearchResult(zone) {
+    setSelectedGroupId(zone.groupId);
+    setSelectedSectorKey(zone.sectorKey);
+    setSelectedTargetId(zone.id);
+    setDisabledNodeIds(new Set());
+    setSearchQuery(zone.nombre);
+    setSearchOpen(false);
+  }
+
   return (
     <MainLayout>
       <section className={`page-section local-explorer-page workspace-page ${mapExpanded ? "workspace-expanded" : ""}`}>
@@ -833,7 +876,65 @@ export default function ExploracionLocal() {
         <article id="local-control-panel" className="panel local-control-panel workspace-side-panel">
             <h3 className="panel-title">Controles locales</h3>
 
-            <div className={`local-control-stack local-controls-${mapView === "dijkstra" ? "four" : "three"}`}>
+            <div className={`local-control-stack local-controls-${mapView === "dijkstra" ? "five" : "four"}`}>
+              <label className="control-group local-search-control">
+                <span className="control-label">Búsqueda</span>
+                <div className="local-search-box">
+                  <input
+                    className="control-input"
+                    type="search"
+                    value={searchQuery}
+                    placeholder="Buscar zona, distrito, provincia o departamento"
+                    autoComplete="off"
+                    onFocus={() => setSearchOpen(true)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSearchQuery(value);
+                      setSearchOpen(true);
+                      const exactMatches = searchableZones.filter(
+                        (zone) =>
+                          zone.nombre.localeCompare(value.trim(), "es", {
+                            sensitivity: "base",
+                          }) === 0
+                      );
+                      if (exactMatches.length === 1) {
+                        selectSearchResult(exactMatches[0]);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && searchResults[0]) {
+                        event.preventDefault();
+                        selectSearchResult(searchResults[0]);
+                      }
+                      if (event.key === "Escape") setSearchOpen(false);
+                    }}
+                    onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
+                  />
+                  {searchOpen && searchQuery.trim() && (
+                    <div className="local-search-results">
+                      {searchResults.length ? (
+                        searchResults.map((zone) => (
+                          <button
+                            key={zone.id}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => selectSearchResult(zone)}
+                          >
+                            <strong>{zone.nombre}</strong>
+                            <span>
+                              {[zone.provincia, zone.departamento]
+                                .filter(Boolean)
+                                .join(" - ")}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <small>Sin coincidencias</small>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </label>
               <label className="control-group">
                 <span className="control-label">Grupo operativo</span>
                 <select

@@ -3998,6 +3998,73 @@ img {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.local-explorer-page .local-control-stack.local-controls-five {
+  grid-template-columns: minmax(220px, 1.35fr) repeat(4, minmax(0, 1fr));
+}
+
+.local-search-control {
+  min-width: 0;
+}
+
+.local-search-box {
+  position: relative;
+}
+
+.local-search-box .control-input {
+  font-size: 0.83rem;
+  min-width: 0;
+  padding: 7px 9px;
+  width: 100%;
+}
+
+.local-search-results {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+  display: grid;
+  left: 0;
+  max-height: 230px;
+  min-width: min(360px, 82vw);
+  overflow-y: auto;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 1200;
+}
+
+.local-search-results button {
+  background: transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  display: grid;
+  gap: 1px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.local-search-results button:hover,
+.local-search-results button:focus-visible {
+  background: var(--accent-primary-soft);
+  outline: none;
+}
+
+.local-search-results strong {
+  color: var(--text-primary);
+  font-size: 0.8rem;
+}
+
+.local-search-results span,
+.local-search-results small {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.local-search-results > small {
+  padding: 7px 8px;
+}
+
 .local-metric-card {
   background: #ecfeff;
   border-color: #67e8f9;
@@ -5494,6 +5561,17 @@ input:focus-visible {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.local-explorer-page .local-control-stack.local-controls-five {
+  grid-template-columns: minmax(220px, 1.35fr) repeat(4, minmax(0, 1fr));
+}
+
+.local-control-panel {
+  max-height: none;
+  overflow: visible;
+  position: relative;
+  z-index: 20;
+}
+
 .local-target-control {
   min-width: 0;
   width: 100%;
@@ -5827,7 +5905,8 @@ input:focus-visible {
   }
 
   .local-explorer-page .local-control-stack.local-controls-three,
-  .local-explorer-page .local-control-stack.local-controls-four {
+  .local-explorer-page .local-control-stack.local-controls-four,
+  .local-explorer-page .local-control-stack.local-controls-five {
     grid-template-columns: 1fr;
   }
 
