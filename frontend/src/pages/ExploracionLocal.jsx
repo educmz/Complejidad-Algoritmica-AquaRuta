@@ -8,7 +8,7 @@ import { runDijkstraExploration } from "../services/dijkstraApi";
 import { fetchRouteGeoJson } from "../services/mapApi";
 import { runTspExploration } from "../services/tspApi";
 import { runGraphTraversal } from "../services/traversalApi";
-import { epsCoverageStatus, epsRequiresValidation } from "../utils/epsCoverage";
+import { epsCoverageStatus } from "../utils/epsCoverage";
 
 const CRITERIA = {
   distancia: {
@@ -756,22 +756,8 @@ export default function ExploracionLocal() {
           <div>
             <h2 className="page-title">Exploración local</h2>
             <p className="page-subtitle">
-              Ordena las zonas de un sector para proponer una secuencia de atención local.
+              Ordena las zonas de un sector y revisa el camino recomendado para la atención operativa.
             </p>
-          </div>
-          <div className="local-hero-grid">
-            <div>
-              <span>Sector seleccionado</span>
-              <strong>{selectedSector?.nombre || "No disponible"}</strong>
-            </div>
-            <div>
-              <span>Priorizar atención por</span>
-              <strong>{criterionInfo.label}</strong>
-            </div>
-            <div>
-              <span>EPS de referencia</span>
-              <strong>{selectedOrigin?.prestador || "No disponible"}</strong>
-            </div>
           </div>
         </article>
 
@@ -799,11 +785,8 @@ export default function ExploracionLocal() {
 
         <article id="local-control-panel" className="panel local-control-panel workspace-side-panel">
             <h3 className="panel-title">Controles locales</h3>
-            <p className="panel-subtitle">
-              Selecciona el sector y el criterio de atención.
-            </p>
 
-            <div className="local-control-stack">
+            <div className={`local-control-stack local-controls-${mapView === "dijkstra" ? "four" : "three"}`}>
               <label className="control-group">
                 <span className="control-label">Grupo operativo</span>
                 <select
@@ -1160,15 +1143,12 @@ export default function ExploracionLocal() {
 
           <article className="panel local-summary-panel">
             <h3 className="panel-title">Resumen local</h3>
-            <p className="panel-subtitle">
-              Propuesta operativa de atención para las zonas del sector.
-            </p>
 
-            <div className="local-summary-groups" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="local-summary-groups">
               {/* 1. Sector y EPS de referencia */}
-              <section className="local-summary-group" style={{ background: 'var(--bg-surface-soft)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-soft)' }}>
-                <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem', display: 'block', marginBottom: '8px' }}>Información del sector</strong>
-                <div className="local-summary-grid compact" style={{ gap: '10px' }}>
+              <section className="local-summary-group">
+                <strong>Información del sector</strong>
+                <div className="local-summary-grid compact local-sector-summary-grid">
                   <div>
                     <span>Sector</span>
                     <strong>{selectedSector?.nombre || "No disponible"}</strong>
@@ -1185,9 +1165,9 @@ export default function ExploracionLocal() {
               </section>
 
               {/* 2. Estimación principal de la ruta */}
-              <section className="local-summary-group" style={{ background: 'var(--bg-surface-soft)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-soft)' }}>
-                <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem', display: 'block', marginBottom: '8px' }}>Resultado principal</strong>
-                <div className="local-summary-grid compact" style={{ gap: '10px' }}>
+              <section className="local-summary-group">
+                <strong>Resultado principal</strong>
+                <div className="local-summary-grid compact local-result-summary-grid">
                   {/* Recorrido estimado (TSP / Road) */}
                   {(mapView === "network" || mapView === "road") && (
                     <>
@@ -1196,8 +1176,8 @@ export default function ExploracionLocal() {
                         <strong>{routePoints.length > 1 ? formatWeight(tspResult.totalDistance, criterion) : "Sin secuencia"}</strong>
                       </div>
                       <div>
-                        <span>Zonas ordenadas</span>
-                        <strong>{sequenceNodes.length}</strong>
+                        <span>Criterio activo</span>
+                        <strong>{criterionInfo.label}</strong>
                       </div>
                     </>
                   )}
@@ -1210,8 +1190,8 @@ export default function ExploracionLocal() {
                         </strong>
                       </div>
                       <div>
-                        <span>Zonas en el camino</span>
-                        <strong>{dijkstraPayload?.path?.length || 0}</strong>
+                        <span>Criterio activo</span>
+                        <strong>{criterionInfo.label}</strong>
                       </div>
                     </>
                   )}
@@ -1264,54 +1244,18 @@ export default function ExploracionLocal() {
               </section>
             </div>
 
-            {/* 3. Mensajes Explicativos y Cobertura */}
-            <div className="local-explanation-card" style={{ marginTop: '16px' }}>
+            <div className="local-eps-card">
               <strong>EPS de referencia</strong>
-              <p>
-                {selectedOrigin
-                  ? `${selectedOrigin.prestador} es el origen EPS referencial más cercano al sector seleccionado.`
-                  : "No se encontró una EPS viable con la información disponible."}
-              </p>
+              <span>{selectedOrigin?.prestador || "No disponible"}</span>
               <span className={`territory-eps-status ${selectedOriginCoverage.key}`}>
                 {selectedOriginCoverage.label}
               </span>
             </div>
 
-            {epsRequiresValidation(selectedOriginCoverage) && (
-              <div className="local-route-status warning" style={{ width: '100%', display: 'block', margin: '12px 0' }}>
-                <strong>Validación operativa requerida</strong>
-                <span style={{ display: 'block', fontWeight: 'normal', marginTop: '4px' }}>La EPS de referencia debe revisarse antes de iniciar el recorrido.</span>
-              </div>
-            )}
-
             {displayedExcludedNodeCount > 0 && (
               <p className="territory-context-note">
                 Algunas zonas pueden excluirse por falta de coordenadas o por límites del cálculo.
               </p>
-            )}
-
-            {/* Resumen dinámico según la vista activa */}
-            {(mapView === "network" || mapView === "road") && (
-              <div className="local-explanation-card">
-                <strong>Resumen del recorrido</strong>
-                <p>
-                  {sequenceNodes.length
-                    ? `La secuencia óptima parte de ${originNode?.nombre} y ordena ${sequenceNodes.length} zona(s) del sector, priorizando ${criterionInfo.label}.`
-                    : "Selecciona al menos una zona para calcular la secuencia local."}
-                </p>
-              </div>
-            )}
-
-            {mapView === "dijkstra" && dijkstraPayload?.metadata && (
-              <div className="local-explanation-card">
-                <strong>Conexión recomendada</strong>
-                <p>
-                  {dijkstraPayload.status === "success"
-                    ? `Camino recomendado de ${dijkstraPayload.path.length} zona(s), calculado para priorizar ${criterionInfo.label}.`
-                    : "No hay camino operativo disponible con los datos actuales."}
-                </p>
-                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Prioridad: {criterionInfo.label}</span>
-              </div>
             )}
 
             {mapView === "traversal" && traversalPayload?.metadata && (
@@ -1367,11 +1311,6 @@ export default function ExploracionLocal() {
                 ))}
               </div>
             )}
-
-            <p className="territory-context-note">
-              La secuencia es una propuesta de apoyo. En sectores grandes puede priorizar zonas
-              representativas para mantener el cálculo manejable.
-            </p>
 
           </article>
         </section>

@@ -13,6 +13,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import EpsMapMarker from "./EpsMapMarker";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -267,7 +268,7 @@ export default function AquaMap({
   const initialCenter = activeCenter || pointsForBounds[0] || [-12.0464, -77.0428];
 
   return (
-    <article className="panel" style={{ padding: "0", overflow: "hidden" }}>
+    <article className="panel aqua-map-card">
       <div className="aqua-map-card-header">
         <div>
           <h3 className="panel-title" style={{ marginBottom: "4px" }}>
@@ -302,7 +303,7 @@ export default function AquaMap({
         )}
       </div>
 
-      <div style={{ height: `${height}px`, width: "100%" }}>
+      <div className="aqua-map-viewport" style={{ height: `${height}px` }}>
         <MapContainer center={initialCenter} zoom={8} style={{ height: "100%", width: "100%" }}>
           <TileLayer
             attribution="&copy; OpenStreetMap contributors"
@@ -363,17 +364,7 @@ export default function AquaMap({
           })}
 
           {origins.map((origin) => (
-            <Marker
-              key={origin.id}
-              position={[origin.lat, origin.lon]}
-              icon={createLabelIcon("EPS", "#1d4ed8")}
-            >
-              <Popup>
-                <strong>{origin.prestador}</strong>
-                <br />
-                {origin.distrito}, {origin.provincia}, {origin.departamento}
-              </Popup>
-            </Marker>
+            <EpsMapMarker key={origin.id} origin={origin} />
           ))}
 
           {groupCenters.map((group, index) => (
@@ -411,6 +402,7 @@ export default function AquaMap({
           )}
 
           {showDistrictMarkers && districtPoints.map((district) => {
+            if (district.isEpsNode) return null;
             const fillColor = district.isSelected
               ? "#dc2626"
               : district.isGoal
@@ -418,12 +410,10 @@ export default function AquaMap({
               : district.isExcluded
               ? "#e2e8f0"
               : district.isActiveNode
-              ? "#0f766e"
-              : district.isEpsNode
-              ? "#1d4ed8"
+              ? "#14b8a6"
               : district.isVisited
-              ? "#0f766e"
-              : "#1d4ed8";
+              ? "#14b8a6"
+              : "#14b8a6";
 
             const color = district.isSelected
               ? "#b91c1c"
@@ -432,24 +422,23 @@ export default function AquaMap({
               : district.isExcluded
               ? "#94a3b8"
               : district.isActiveNode
-              ? "#0f766e"
-              : district.isEpsNode
-              ? "#1d4ed8"
+              ? "#0f172a"
               : district.isVisited
-              ? "#0f766e"
-              : "#1e40af";
+              ? "#0f172a"
+              : "#0f766e";
 
             return (
               <CircleMarker
                 key={district.id}
                 center={district.center}
-                radius={district.isEpsNode ? 8 : district.isSelected ? 10 : district.isGoal ? 9 : 7}
+                radius={district.isSelected ? 10 : district.isGoal ? 9 : 6.5}
                 pathOptions={{
                   color,
                   fillColor,
                   fillOpacity: district.isExcluded ? 0.42 : 0.95,
                   opacity: district.isExcluded ? 0.72 : 1,
-                  weight: district.isExcluded ? 1.5 : 2,
+                  dashArray: district.isExcluded ? "4 4" : null,
+                  weight: district.isExcluded ? 1.5 : district.isActiveNode ? 3 : 2,
                 }}
                 eventHandlers={{
                   click: () => onDistrictClick?.(district),
